@@ -22,9 +22,9 @@ namespace Wizard.Head
             return context;
         }
 
-        private void RememberMessage(MessageContainer message)
+        private async Task RememberMessage(MessageContainer message)
         {
-            foreach(IMemoryHandler handler in memoryHandlers) handler.RememberMessage(message);
+            foreach(IMemoryHandler handler in memoryHandlers) await handler.RememberMessage(message);
         }
 
         public async Task<MessageContainer?> OnMessageCreated(string author, string message)
@@ -33,14 +33,14 @@ namespace Wizard.Head
 
             if(!await llm.WantsToRespond(AssembleContext(formattedMessage)))
             {
-                RememberMessage(formattedMessage);
+                await RememberMessage(formattedMessage);
                 return null;
             }
 
             MessageContainer response = await llm.RespondToMessage(AssembleContext(formattedMessage));
 
-            RememberMessage(formattedMessage);
-            RememberMessage(response);
+            await RememberMessage(formattedMessage);
+            await RememberMessage(response);
 
             WriteData();
             

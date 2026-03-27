@@ -5,7 +5,7 @@ namespace Wizard.Memory
 {
     public interface IMemoryHandler
     {
-        public void RememberMessage(MessageContainer message);
+        public Task RememberMessage(MessageContainer message);
 
         public List<MessageContainer> RecallMemory(MessageContainer message);
         

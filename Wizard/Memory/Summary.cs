@@ -9,11 +9,11 @@ namespace Wizard.Memory
 
         readonly ILLM llm = llm;
 
-        public override void RememberMessage(MessageContainer message)
+        public override async Task RememberMessage(MessageContainer message)
         {
-            base.RememberMessage(message);
+            await base.RememberMessage(message);
 
-            if(memory.Count == maxMessages) _ = Resummarize();
+            if(memory.Count == maxMessages) await Resummarize();
         }
 
         public override List<MessageContainer> RecallMemory(MessageContainer message) => [summary];

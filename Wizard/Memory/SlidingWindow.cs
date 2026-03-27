@@ -11,7 +11,7 @@ namespace Wizard.Memory
 
         public virtual List<MessageContainer> RecallMemory(MessageContainer message) => memory;
 
-        public virtual void RememberMessage(MessageContainer message)
+        public virtual async Task RememberMessage(MessageContainer message)
         {
             memory.Add(message);
 
