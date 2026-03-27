@@ -31,12 +31,15 @@ namespace Wizard.Head
         {
             MessageContainer formattedMessage = new($"{author} says: {message}");
 
-            RememberMessage(formattedMessage);
-
-            if(!await llm.WantsToRespond(AssembleContext(formattedMessage))) return null;
+            if(!await llm.WantsToRespond(AssembleContext(formattedMessage)))
+            {
+                RememberMessage(formattedMessage);
+                return null;
+            }
 
             MessageContainer response = await llm.RespondToMessage(AssembleContext(formattedMessage));
 
+            RememberMessage(formattedMessage);
             RememberMessage(response);
 
             WriteData();
