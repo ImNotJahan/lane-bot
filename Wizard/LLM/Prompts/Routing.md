@@ -15,6 +15,12 @@ Respond with 0 if:
 - The message is clearly off-topic and unrelated to any ongoing conversation
 - The message was not directed at the bot (e.g. the user is talking to someone else)
 - The message is empty, meaningless, or a duplicate
+- The message seems unfinished, or the user is going to send a followup message
+
+Current conversation:
+<messages>
+{0}
+</messages>
 
 DO NOT list any reasoning. Only reply with 1 or 0.
 

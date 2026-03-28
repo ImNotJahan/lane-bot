@@ -41,7 +41,7 @@ namespace Wizard.LLM
 
         public async Task<bool> WantsToRespond(List<MessageContainer> context)
         {
-            string result = (await Prompt(context, Prompts.GetPrompt("Routing"))).GetContent();
+            string result = (await Prompt([context[^1]], string.Format(Prompts.GetPrompt("Routing"), context))).GetContent();
 
             if     (result == "1") return true;
             else if(result == "0") return false;
