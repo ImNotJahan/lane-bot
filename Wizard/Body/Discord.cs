@@ -1,4 +1,5 @@
 using DSharpPlus;
+using DSharpPlus.Entities;
 using DSharpPlus.EventArgs;
 using Wizard.Head;
 using Wizard.LLM;
@@ -25,11 +26,23 @@ namespace Wizard.Body
             client.MessageCreated += OnMessageCreated;
         }
 
+        private static string ResolveMentions(MessageCreateEventArgs args)
+        {
+            string content = args.Message.Content;
+
+            foreach (DiscordUser user in args.MentionedUsers)
+                content = content.Replace($"<@{user.Id}>", $"@{user.Username}")
+                                 .Replace($"<@!{user.Id}>", $"@{user.Username}");
+
+            return content;
+        }
+
+
         private async Task OnMessageCreated(DiscordClient client, MessageCreateEventArgs args)
         {
             if(args.Author.IsBot) return;
 
-            MessageContainer? response = await bot.OnMessageCreated(args.Author.Username, args.Message.Content);
+            MessageContainer? response = await bot.OnMessageCreated(args.Author.Username, ResolveMentions(args));
 
             if(response is null) return;
 
