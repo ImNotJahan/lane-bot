@@ -1,5 +1,6 @@
 using Newtonsoft.Json.Linq;
 using Wizard.LLM;
+using Wizard.Utility;
 
 namespace Wizard.Memory
 {
@@ -20,12 +21,13 @@ namespace Wizard.Memory
 
         private async Task Resummarize()
         {
-            string conversation = "";
+            List<MessageContainer> snapshot = [..memory];
+            memory.Clear();
 
-            foreach(MessageContainer message in memory) conversation += message.GetContent() + "\n";
+            string conversation = string.Join("\n", snapshot.Select(m => m.GetContent()));
 
             summary = await llm.Prompt(
-                memory,
+                snapshot,
                 string.Format(
                     Prompts.GetPrompt("Summarize"),
                     summary.GetContent(),
@@ -33,7 +35,7 @@ namespace Wizard.Memory
                 )
             );
 
-            memory.Clear();
+            Logger.LogInformation("Summarizing conversation as: " + summary.GetContent());
         }
 
         public override JToken Serialize()
