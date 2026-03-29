@@ -33,22 +33,7 @@ namespace Wizard.LLM
                 Messages    = messages
             };
         }
-        
-        public async Task<MessageContainer> RespondToMessage(List<MessageContainer> context)
-        {
-            return await Prompt(context, Prompts.GetPrompt("Respond"));
-        }
-
-        public async Task<bool> WantsToRespond(List<MessageContainer> context)
-        {
-            string result = (await Prompt([context[^1]], string.Format(Prompts.GetPrompt("Routing"), context))).GetContent();
-
-            if     (result == "1") return true;
-            else if(result == "0") return false;
-            
-            throw new Exception($"Router responded incorrectly: {result}");
-        }
-
+    
         public async Task<MessageContainer> Prompt(List<MessageContainer> context, string systemPrompt)
         {
             Message response = await client.Messages.Create(CreateParams(context, systemPrompt));

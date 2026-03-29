@@ -25,7 +25,7 @@ namespace Wizard.Head
         private async Task RememberMessage(MessageContainer message)
         {
             Logger.LogDebug("Remembering message {0}", message.GetContent());
-            
+
             foreach(IMemoryHandler handler in memoryHandlers) await handler.RememberMessage(message);
         }
 
@@ -33,19 +33,21 @@ namespace Wizard.Head
         {
             Logger.LogInformation("Recieved message {0}", message);
 
-            MessageContainer formattedMessage = new($"{author} says: {message}");
+            MessageContainer       formattedMessage = new($"{author} says: {message}");
+            List<MessageContainer> context          = await AssembleContext(formattedMessage);
+            float                  enthusiasm       = await Enthusiasm(context);
 
-            if(!await llm.WantsToRespond(await AssembleContext(formattedMessage)))
+            if(enthusiasm < 0.1f)
             {
-                Logger.LogInformation("Decided not to respond to message");
+                Logger.LogInformation($"Decided not to respond to message (enthusiasm {enthusiasm})");
 
                 await RememberMessage(formattedMessage);
                 return null;
             }
 
-            Logger.LogInformation("Decided to respond to message");
+            Logger.LogInformation($"Decided to respond to message (enthusiasm {enthusiasm})");
 
-            MessageContainer response = await llm.RespondToMessage(await AssembleContext(formattedMessage));
+            MessageContainer response = await RespondToMessage(context, enthusiasm);
 
             Logger.LogInformation("Will respond with {0}", response.GetContent());
 
@@ -68,5 +70,31 @@ namespace Wizard.Head
 
             JSONWriter.WriteData(data);
         }
+
+        private async Task<MessageContainer> RespondToMessage(List<MessageContainer> context, float enthusiasm)
+        {
+            string enthusiasmContext = enthusiasm switch
+            {
+                >= 0.8f => "high",
+                >= 0.5f => "neutral",
+                _       => "low"
+            };
+            
+            return await llm.Prompt(
+                context,
+                string.Format(Prompts.GetPrompt("Respond"), enthusiasmContext)
+            );
+        }
+
+        private async Task<float> Enthusiasm(List<MessageContainer> context)
+        {
+            string result = (await llm.Prompt([context[^1]], string.Format(Prompts.GetPrompt("Routing"), context))).GetContent();
+
+            if(!float.TryParse(result, out float enthusiasm)) throw new InvalidRouterValue(result);
+
+            return enthusiasm;
+        }
+
+        private class InvalidRouterValue(string value) : Exception($"Router responded incorrectly: {value}") {}
     }
 }
