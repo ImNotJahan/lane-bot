@@ -4,12 +4,18 @@ namespace Wizard.Utility
 {
     public static class Logger
     {
+        const LogLevel MinimumLevel = LogLevel.Debug;
+
         static readonly ILogger logger;
 
         static Logger()
         {
-            using ILoggerFactory factory = LoggerFactory.Create(builder => builder.AddConsole());
-
+            using ILoggerFactory factory = LoggerFactory.Create(builder => 
+            {
+                builder.AddConsole();
+                builder.SetMinimumLevel(MinimumLevel);
+            });
+            
             logger = factory.CreateLogger("Program");
         }
 

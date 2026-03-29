@@ -86,9 +86,19 @@ namespace Wizard.Head
             );
         }
 
+        private static string ContextToString(List<MessageContainer> context)
+        {
+            return string.Join("\n", context.Select(m => m.GetContent()));
+        }
+
         private async Task<float> Enthusiasm(List<MessageContainer> context)
         {
-            string result = (await llm.Prompt([context[^1]], string.Format(Prompts.GetPrompt("Routing"), context))).GetContent();
+            string formattedContext = ContextToString(context);
+            string prompt           = string.Format(Prompts.GetPrompt("Routing"), formattedContext);
+
+            Logger.LogDebug("Gauging enthusiasm with prompt: " + formattedContext);
+
+            string result = (await llm.Prompt([context[^1]], prompt)).GetContent();
 
             if(!float.TryParse(result, out float enthusiasm)) throw new InvalidRouterValue(result);
 
