@@ -29,9 +29,15 @@ namespace Wizard.Head
             foreach(IMemoryHandler handler in memoryHandlers) await handler.RememberMessage(message);
         }
 
-        public async Task<MessageContainer?> OnMessageCreated(string author, string message)
+        public async Task<MessageContainer?> OnMessageCreated(
+            string       author,
+            string       message,
+            List<string> imageUrls
+        )
         {
             Logger.LogInformation("Recieved message {0}", message);
+
+            foreach(string url in imageUrls) await RememberMessage(new(url, Author.User, MessageType.Image));
 
             MessageContainer       formattedMessage = new($"{author} says: {message}");
             List<MessageContainer> context          = await AssembleContext(formattedMessage);

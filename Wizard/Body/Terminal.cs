@@ -20,7 +20,7 @@ namespace Wizard.Body
 
                 if(input is null) continue;
 
-                MessageContainer? response = await bot.OnMessageCreated("User", input);
+                MessageContainer? response = await bot.OnMessageCreated("User", input, []);
 
                 if(response is null) continue;
 

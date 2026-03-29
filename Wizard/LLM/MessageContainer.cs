@@ -1,3 +1,4 @@
+using Anthropic.Core;
 using Anthropic.Models.Messages;
 using Newtonsoft.Json.Linq;
 
@@ -5,15 +6,23 @@ namespace Wizard.LLM
 {
     public sealed class MessageContainer
     {
+        // either the text of the message, or a base64 encoding of an image
         readonly string   content;
         readonly Author   author;
         readonly DateTime time;
 
-        public MessageContainer(string content, Author author = Author.User)
+        readonly MessageType type;
+
+        public MessageContainer(
+            string      content,
+            Author      author = Author.User,
+            MessageType type   = MessageType.Text
+        )
         {
             this.content = content;
             this.author  = author;  
-            this.time    = DateTime.UtcNow; 
+            this.time    = DateTime.UtcNow;
+            this.type    = type;
         }
 
         public MessageContainer(JToken data)
@@ -43,15 +52,32 @@ namespace Wizard.LLM
                 _           => throw new Exception($"Unexpected author type {author}")
             };
 
-            string formatted = content;
-
-            if(role == Role.User) formatted = "[" + time.ToString("yyyy/MM/dd HH:mm:ss") + "] " + formatted;
-
-            return new()
+            if(type == MessageType.Text)
             {
-                Role    = role,
-                Content = content
-            };
+                string formatted = content;
+
+                if(role == Role.User) formatted = "[" + time.ToString("yyyy/MM/dd HH:mm:ss") + "] " + formatted;
+
+                return new()
+                {
+                    Role    = role,
+                    Content = formatted
+                };
+            } else if(type == MessageType.Image)
+            {
+                return new()
+                {
+                    Role    = role,
+                    Content = new([
+                        new ImageBlockParam()
+                        {
+                            Source = new(new UrlImageSource(content))
+                        }
+                    ])
+                };
+            }
+
+            throw new Exception("Unknown MessageType " + type);
         }
 
         public string GetContent() => content;
@@ -73,5 +99,11 @@ namespace Wizard.LLM
     {
         User,
         Bot
+    }
+
+    public enum MessageType
+    {
+        Text,
+        Image
     }
 }

@@ -37,12 +37,21 @@ namespace Wizard.Body
             return content;
         }
 
-
         private async Task OnMessageCreated(DiscordClient client, MessageCreateEventArgs args)
         {
             if(args.Author.IsBot) return;
 
-            MessageContainer? response = await bot.OnMessageCreated(args.Author.Username, ResolveMentions(args));
+            List<string> imageUrls = [];
+
+            foreach (DiscordAttachment attachment in args.Message.Attachments)
+            {
+                if (attachment.MediaType?.StartsWith("image/") == true)
+                {
+                    imageUrls.Add(attachment.Url);
+                }
+            }
+
+            MessageContainer? response = await bot.OnMessageCreated(args.Author.Username, ResolveMentions(args), imageUrls);
 
             if(response is null) return;
 
