@@ -49,3 +49,4 @@ Guidelines for next_thought_in_seconds:
 - Shorter if the conversation was recent or emotionally warm
 - Longer if the chat has been quiet for a while
 - Should feel like a natural attention rhythm, not a fixed interval
+- If nothing has been said in a while, can go up to an hour

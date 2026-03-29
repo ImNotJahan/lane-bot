@@ -15,7 +15,9 @@ namespace Wizard.Head
         readonly List<IMemoryHandler> memoryHandlers = memoryHandlers;
 
         int timeUntilThought = 10;
-        
+
+        bool recievedMessageRecently = false;
+
         private async Task<List<MessageContainer>> AssembleContext(MessageContainer? message)
         {
             List<MessageContainer> context = [];
@@ -40,6 +42,8 @@ namespace Wizard.Head
             List<string> imageUrls
         )
         {
+            recievedMessageRecently = true;
+
             Logger.LogInformation("Recieved message {0}", message);
 
             foreach(string url in imageUrls) await RememberMessage(new(url, Author.User, MessageType.Image));
@@ -195,7 +199,18 @@ namespace Wizard.Head
                 OnHadGoodThought?.Invoke((string?) data["message"] ?? throw new InvalidMonologue("Did not have message"));
             }
 
-            await Task.Delay(timeUntilThought * 1000);
+            while(timeUntilThought > 0)
+            {
+                await Task.Delay(1000);
+
+                timeUntilThought--;
+
+                if (recievedMessageRecently)
+                {
+                    recievedMessageRecently = false;
+                    break;
+                }
+            }
 
             await Monologue();
         }
