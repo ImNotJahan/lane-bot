@@ -1,4 +1,3 @@
-using Anthropic.Core;
 using Anthropic.Models.Messages;
 using Newtonsoft.Json.Linq;
 
@@ -29,6 +28,7 @@ namespace Wizard.LLM
         {
             string? content = (string?) data["content"];
             int?    author  = (int?)    data["author"];
+            int?    type    = (int?)    data["type"];
 
             if(content is null) throw new Exception("Content is null");
             if(author  is null) throw new Exception("Author is null");
@@ -38,6 +38,13 @@ namespace Wizard.LLM
             if(time is not null) this.time = (DateTime) time;
 
             if(!Enum.IsDefined(typeof(Author), author)) throw new Exception($"Invalid author type {author}");
+
+            if(type is not null)
+            {
+                if(!Enum.IsDefined(typeof(MessageType), type)) throw new Exception($"Invalid MessageType {type}");
+
+                this.type = (MessageType) type;
+            }
             
             this.author  = (Author) author;
             this.content = content;
@@ -75,6 +82,13 @@ namespace Wizard.LLM
                         }
                     ])
                 };
+            } else if(type == MessageType.Thought)
+            {
+                return new()
+                {
+                    Role    = role,
+                    Content = $"<thought>{content}</thought>"
+                };
             }
 
             throw new Exception("Unknown MessageType " + type);
@@ -83,6 +97,8 @@ namespace Wizard.LLM
         public string GetContent() => content;
 
         public Author GetAuthor() => author;
+        
+        public MessageType GetMessageType() => type;
 
         public JToken Serialize()
         {
@@ -90,7 +106,8 @@ namespace Wizard.LLM
             {
                 ["content"] = content,
                 ["author"]  = (int) author,
-                ["time"]    = time
+                ["time"]    = time,
+                ["type"]    = (int) type
             };
         }
     }
@@ -104,6 +121,7 @@ namespace Wizard.LLM
     public enum MessageType
     {
         Text,
-        Image
+        Image,
+        Thought
     }
 }

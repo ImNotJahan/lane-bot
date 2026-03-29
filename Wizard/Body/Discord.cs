@@ -12,10 +12,10 @@ namespace Wizard.Body
         readonly DiscordClient client;
         readonly Bot           bot;
 
+        DiscordChannel? recentChannel = null;
+
         public Discord(ILLM llm, List<IMemoryHandler> memoryHandlers)
         {
-            bot = new(llm, memoryHandlers);
-
             client = new DiscordClient(new DiscordConfiguration()
             {
                 Token     = DotNetEnv.Env.GetString("DISCORD_API_KEY"),
@@ -23,6 +23,11 @@ namespace Wizard.Body
                 Intents   = DiscordIntents.AllUnprivileged | DiscordIntents.MessageContents
             });
 
+            bot = new(llm, memoryHandlers);
+
+            bot.OnHadGoodThought += OnHadGoodThought;
+
+            client.Ready          += OnReady;
             client.MessageCreated += OnMessageCreated;
         }
 
@@ -37,8 +42,21 @@ namespace Wizard.Body
             return content;
         }
 
+        private async Task OnReady(DiscordClient client, ReadyEventArgs args)
+        {
+            bot.StartMonologue();            
+        }
+
+        private async void OnHadGoodThought(string thought)
+        {
+            if(recentChannel is not null) await client.SendMessageAsync(recentChannel, thought);
+            else await client.SendMessageAsync(await client.GetChannelAsync(1458989331518853253), thought);
+        }
+
         private async Task OnMessageCreated(DiscordClient client, MessageCreateEventArgs args)
         {
+            recentChannel = args.Channel;
+
             if(args.Author.IsBot) return;
 
             List<string> imageUrls = [];

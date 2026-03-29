@@ -9,7 +9,7 @@ namespace Wizard.Memory
         
         protected readonly int maxMessages = maxMessages;
 
-        public async virtual Task<List<MessageContainer>> RecallMemory(MessageContainer message) => memory;
+        public async virtual Task<List<MessageContainer>> RecallMemory(MessageContainer? message) => memory;
 
         public virtual async Task RememberMessage(MessageContainer message)
         {

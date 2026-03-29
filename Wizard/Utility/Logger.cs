@@ -4,7 +4,7 @@ namespace Wizard.Utility
 {
     public static class Logger
     {
-        const LogLevel MinimumLevel = LogLevel.Debug;
+        const LogLevel MinimumLevel = LogLevel.Information;
 
         static readonly ILogger logger;
 

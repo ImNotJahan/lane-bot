@@ -28,9 +28,9 @@ namespace Wizard
             ILLM llm = new Claude();
 
             List<IMemoryHandler> memoryHandlers = [
-                new Summary(20, llm),
-                new RAG(5),
-                new SlidingWindow(20)
+                new Summary(10, llm),
+                new RAG(10),
+                new SlidingWindow(10)
             ];
 
             if (JSONWriter.HasData())

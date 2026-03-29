@@ -46,6 +46,8 @@ namespace Wizard.Memory
         
         public async Task RememberMessage(MessageContainer message)
         {
+            if(message.GetMessageType() == MessageType.Thought) return;
+            
             await qdrant.UpsertAsync(
                 collectionName: CollectionName,
                 [
@@ -62,8 +64,10 @@ namespace Wizard.Memory
             );
         }
 
-        public async Task<List<MessageContainer>> RecallMemory(MessageContainer message)
+        public async Task<List<MessageContainer>> RecallMemory(MessageContainer? message)
         {
+            if(message is null) return [];
+
             IReadOnlyList<ScoredPoint> points = await qdrant.QueryAsync(
                 collectionName: CollectionName,
                 query:          await CalculateVectors(message),
