@@ -35,6 +35,21 @@ namespace Wizard.Body
             client.MessageCreated += OnMessageCreated;
         }
 
+        private static string FormatMessage(MessageCreateEventArgs args)
+        {
+            string formatted = ResolveMentions(args);
+
+            if(args.Message.ReferencedMessage is not null)
+            {
+                // is replying to a message
+                DiscordMessage replied = args.Message.ReferencedMessage;
+
+                formatted += $" in response to {replied.Author.Username}: {replied.Content}";
+            }
+
+            return formatted;
+        }
+
         private static string ResolveMentions(MessageCreateEventArgs args)
         {
             string content = args.Message.Content;
@@ -73,7 +88,7 @@ namespace Wizard.Body
                 }
             }
 
-            MessageContainer? response = await bot.OnMessageCreated(args.Author.Username, ResolveMentions(args), imageUrls);
+            MessageContainer? response = await bot.OnMessageCreated(args.Author.Username, FormatMessage(args), imageUrls);
 
             if(response is null) return;
 
