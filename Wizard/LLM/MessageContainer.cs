@@ -61,14 +61,10 @@ namespace Wizard.LLM
 
             if(type == MessageType.Text)
             {
-                string formatted = content;
-
-                if(role == Role.User) formatted = "[" + time.ToString("yyyy/MM/dd HH:mm:ss") + "] " + formatted;
-
                 return new()
                 {
                     Role    = role,
-                    Content = formatted
+                    Content = ToString()
                 };
             } else if(type == MessageType.Image)
             {
@@ -94,11 +90,18 @@ namespace Wizard.LLM
             throw new Exception("Unknown MessageType " + type);
         }
 
-        public string GetContent() => content;
-
-        public Author GetAuthor() => author;
-        
+        public string      GetContent()     => content;
+        public Author      GetAuthor()      => author;
         public MessageType GetMessageType() => type;
+
+        public override string ToString()
+        {
+            string formatted = GetContent();
+
+            formatted = "[" + time.ToString("yyyy/MM/dd HH:mm:ss") + "] " + formatted;
+
+            return formatted;
+        }
 
         public JToken Serialize()
         {
