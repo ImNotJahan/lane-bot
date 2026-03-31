@@ -1,5 +1,6 @@
 using Anthropic;
 using Anthropic.Models.Messages;
+using Wizard.Utility;
 
 namespace Wizard.LLM
 {
@@ -18,9 +19,30 @@ namespace Wizard.LLM
             };
         }
 
-        private static MessageCreateParams CreateParams(List<MessageContainer> context, string prompt)
+        private static MessageCreateParams CreateParams(List<MessageContainer> context, string prompt, string cachedDynamicPrompt, string dynamicPrompt)
         {
-            List<MessageParam> messages = [];
+            List<MessageParam>    messages      = [];
+            List<TextBlockParam>  systemBlocks  = [
+                new TextBlockParam
+                {
+                    Text         = prompt,
+                    CacheControl = new CacheControlEphemeral()
+                }
+            ];
+
+            if(cachedDynamicPrompt != "")
+            {
+                systemBlocks.Add(new TextBlockParam
+                {
+                    Text         = cachedDynamicPrompt,
+                    CacheControl = new CacheControlEphemeral()
+                });
+            }
+
+            if(dynamicPrompt != "")
+            {
+                systemBlocks.Add(new TextBlockParam { Text = dynamicPrompt });
+            }
 
             foreach(MessageContainer message in context) messages.Add(message.Anthropic());
 
@@ -29,14 +51,21 @@ namespace Wizard.LLM
                 MaxTokens   = MaxTokens,
                 Model       = Model,
                 Temperature = 1,
-                System      = prompt,
+                System      = systemBlocks,
                 Messages    = messages
             };
         }
-    
-        public async Task<MessageContainer> Prompt(List<MessageContainer> context, string systemPrompt)
+
+        public async Task<MessageContainer> Prompt(
+            List<MessageContainer> context,
+            string                 systemPrompt,
+            string                 cachedDynamicPrompt = "",
+            string                 dynamicPrompt       = ""
+        )
         {
-            Message response = await client.Messages.Create(CreateParams(context, systemPrompt));
+            Message response = await client.Messages.Create(CreateParams(
+                context, systemPrompt, cachedDynamicPrompt, dynamicPrompt
+            ));
 
             string formattedResponse = "";
 
@@ -47,6 +76,14 @@ namespace Wizard.LLM
                     formattedResponse += text.Text;
                 }
             }
+
+            Logger.LogDebug(
+                "Token usage — input: {0}, output: {1}, cache write: {2}, cache read: {3}",
+                response.Usage.InputTokens,
+                response.Usage.OutputTokens,
+                response.Usage.CacheCreationInputTokens ?? 0,
+                response.Usage.CacheReadInputTokens     ?? 0
+            );
 
             return new(formattedResponse, Author.Bot);
         }

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Newtonsoft.Json.Linq;
 using Wizard.LLM;
 using Wizard.Memory;
@@ -119,18 +120,20 @@ namespace Wizard.Head
                 _       => "low"
             };
 
-            string prompt = string.Format(
-                Prompts.GetPrompt("Respond"),
-                memoryContext,
+            string cachedDynamicPrompt = string.Format(Prompts.GetPrompt("Respond_Memory"), memoryContext);
+            string dynamicPrompt       = string.Format(
+                Prompts.GetPrompt("Respond_Dynamic"),
                 conversationContext,
                 enthusiasmContext
             );
 
-            Logger.LogDebug("Responding to message with prompt: " + prompt);
-            
+            Logger.LogDebug("Responding to message with dynamic prompt: " + dynamicPrompt);
+
             return await llm.Prompt(
                 [message],
-                prompt
+                Prompts.GetPrompt("Respond"),
+                cachedDynamicPrompt,
+                dynamicPrompt
             );
         }
 
@@ -155,12 +158,14 @@ namespace Wizard.Head
 
         private async Task<float> Enthusiasm(List<MessageContainer> context, MessageContainer message)
         {
-            string formattedContext = ContextToString(context);
-            string prompt           = string.Format(Prompts.GetPrompt("Routing"), formattedContext);
+            string dynamicPrompt = string.Format(
+                Prompts.GetPrompt("Routing_Dynamic"),
+                ContextToString(context)
+            );
 
-            Logger.LogDebug("Gauging enthusiasm with prompt: " + formattedContext);
+            Logger.LogDebug("Gauging enthusiasm with dynamic prompt: " + dynamicPrompt);
 
-            string result = (await llm.Prompt([message], prompt)).GetContent();
+            string result = (await llm.Prompt([message], Prompts.GetPrompt("Routing"), dynamicPrompt)).GetContent();
 
             if(!float.TryParse(result, out float enthusiasm)) throw new InvalidRouterValue(result);
 
@@ -205,16 +210,20 @@ namespace Wizard.Head
                 string memoryContext       = ContextToString(await AssembleContext(lastThought, false, true));
                 string conversationContext = ContextToString(await AssembleContext(lastThought, true,  false));
 
-                string prompt = string.Format(
-                    Prompts.GetPrompt("Monologue"),
-                    memoryContext,
+                string cachedDynamicPrompt = string.Format(Prompts.GetPrompt("Monologue_Memory"), memoryContext);
+                string dynamicPrompt       = string.Format(
+                    Prompts.GetPrompt("Monologue_Dynamic"),
                     conversationContext,
                     DateTime.UtcNow.ToString("yyyy/MM/dd HH:mm:ss")
                 );
 
-                Logger.LogDebug("Monologuing with prompt: " + prompt);
+                Logger.LogDebug("Monologuing with dynamic prompt: " + dynamicPrompt);
 
-                MessageContainer response = await llm.Prompt([new(prompt)], "");
+                MessageContainer response = await llm.Prompt(
+                    [new(dynamicPrompt, Author.Bot)],
+                    Prompts.GetPrompt("Monologue"),
+                    cachedDynamicPrompt
+                );
 
                 if(response.GetContent() == "") throw new Exception("Response was empty");
 
@@ -224,13 +233,17 @@ namespace Wizard.Head
                 {
                     string toParse = response.GetContent();
 
-                    // since we tell llm to respond in json, sometimes it will wrap
-                    // response in these, which we don't want
-                    toParse = toParse.Replace("```json", "").Replace("```", "");
+                    // sometimes the LLM will include extra stuff in the response,
+                    // so we will look for and extract just the JSON
+                    int start = toParse.IndexOf('{');
+                    int end   = toParse.LastIndexOf('}');
 
-                    data = JObject.Parse(toParse);
+                    if(start == -1 || end == -1 || end < start) throw new InvalidMonologue("No JSON object found in response");
+
+                    data = JObject.Parse(toParse[start..(end + 1)]);
                 } catch(Exception exception)
                 {
+                    Logger.LogError("Invalid monologue: " + response.GetContent());
                     throw new InvalidMonologue(exception.ToString());
                 }
 

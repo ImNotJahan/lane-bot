@@ -28,11 +28,6 @@ Score 0.0 if:
 - The message is empty, meaningless, or a duplicate
 - The message seems unfinished
 
-Current conversation:
-<messages>
-{0}
-</messages>
-
 DO NOT list any reasoning. Only reply with a single float (e.g. 0.7).
 
 Enthusiasm score:

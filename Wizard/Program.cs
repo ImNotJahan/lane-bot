@@ -40,7 +40,7 @@ namespace Wizard
             {
                 memoryHandlers = [
                     new Summary(10, llm),
-                    new RAG(10),
+                    new RAG(10, 10),
                     new SlidingWindow(10)
                 ];
             }
@@ -51,15 +51,23 @@ namespace Wizard
                     switch (handler.Handler)
                     {
                         case "RAG":
-                            memoryHandlers.Add(new RAG((ulong) handler.Size));
+                            memoryHandlers.Add(new RAG(
+                                (ulong) handler.Args["SelectLimit"],
+                                        handler.Args["RecallInterval"]
+                            ));
                             break;
                         
                         case "Summary":
-                            memoryHandlers.Add(new Summary(handler.Size, llm));
+                            memoryHandlers.Add(new Summary(
+                                handler.Args["UpdateInterval"], 
+                                llm
+                            ));
                             break;
                         
                         case "SlidingWindow":
-                            memoryHandlers.Add(new SlidingWindow(handler.Size));
+                            memoryHandlers.Add(new SlidingWindow(
+                                handler.Args["MaxMessages"]
+                            ));
                             break;
                         
                         default:
@@ -115,8 +123,8 @@ namespace Wizard
 
         public sealed class HandlerSettings
         {
-            public required string Handler { get; set; }
-            public required int    Size    { get; set; }
+            public required string                  Handler { get; set; }
+            public required Dictionary<string, int> Args    { get; set; }
         }
     }
 }

@@ -8,34 +8,23 @@ using Azure;
 
 namespace Wizard.Memory
 {
-    public sealed class RAG : IMemoryHandler
+    public sealed class RAG(ulong selectLimit, int recallInterval) : SlidingWindow(recallInterval)
     {
-        readonly QdrantClient    qdrant;
-        readonly EmbeddingClient embeddingClient;
+        readonly QdrantClient qdrant = new(
+            host:   DotNetEnv.Env.GetString("QDRANT_ENDPOINT"),
+            https:  true,
+            port:   6334,
+            apiKey: DotNetEnv.Env.GetString("QDRANT_API_KEY")
+        );
+        readonly EmbeddingClient embeddingClient = new AzureOpenAIClient(
+            new Uri(               DotNetEnv.Env.GetString("OPENAI_EMBEDDING_ENDPOINT")),
+            new AzureKeyCredential(DotNetEnv.Env.GetString("OPENAI_EMBEDDING_API_KEY"))
+        ).GetEmbeddingClient(EmbeddingsModel);
 
         private const string EmbeddingsModel = "text-embedding-3-small";
         private const string CollectionName  = "lane-rag";
 
-        readonly ulong selectLimit;
-
-        public RAG(ulong selectLimit)
-        {
-            this.selectLimit = selectLimit;
-            
-            qdrant = new(
-                host:   DotNetEnv.Env.GetString("QDRANT_ENDPOINT"),
-                https:  true,
-                port:   6334,
-                apiKey: DotNetEnv.Env.GetString("QDRANT_API_KEY")
-            );
-
-            AzureOpenAIClient azureClient = new(
-                new Uri(DotNetEnv.Env.GetString("OPENAI_EMBEDDING_ENDPOINT")),
-                new AzureKeyCredential(DotNetEnv.Env.GetString("OPENAI_EMBEDDING_API_KEY"))
-            );
-
-            embeddingClient = azureClient.GetEmbeddingClient(EmbeddingsModel);
-        }
+        List<MessageContainer> lastRecall = [];
 
         private async Task<float[]> CalculateVectors(MessageContainer message)
         {
@@ -43,11 +32,13 @@ namespace Wizard.Memory
 
             return embedding.ToFloats().ToArray();
         }
-        
-        public async Task RememberMessage(MessageContainer message)
+
+        public override async Task RememberMessage(MessageContainer message)
         {
             if(message.GetMessageType() == MessageType.Thought) return;
-            
+
+            await base.RememberMessage(message);
+
             await qdrant.UpsertAsync(
                 collectionName: CollectionName,
                 [
@@ -64,18 +55,19 @@ namespace Wizard.Memory
             );
         }
 
-        public async Task<List<MessageContainer>> RecallMemory(MessageContainer? message)
+        public override async Task<List<MessageContainer>> RecallMemory(MessageContainer? message)
         {
             if(message is null) return [];
 
-            // what we do for this is we encode message into vectors, then send
-            // it off to our database to find similar messages
+            if(memory.Count < maxMessages) return lastRecall;
 
             IReadOnlyList<ScoredPoint> points = await qdrant.QueryAsync(
                 collectionName: CollectionName,
                 query:          await CalculateVectors(message),
                 limit:          selectLimit
             );
+
+            memory.Clear();
 
             List<MessageContainer> messages = [];
 
@@ -87,12 +79,14 @@ namespace Wizard.Memory
                 ));
             }
 
+            lastRecall = messages;
+
             return messages;
         }
 
-        public bool IsRecent() => false;
+        public override bool IsRecent() => false;
 
-        public JToken Serialize() => new JObject();
-        public void   Deserialize(JToken data) {}
+        public override JToken Serialize() => new JObject();
+        public override void   Deserialize(JToken data) {}
     }
 }
