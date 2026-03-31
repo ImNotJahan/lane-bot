@@ -8,7 +8,7 @@ namespace Wizard.Body
 {
     public sealed class Terminal(ILLM llm, List<IMemoryHandler> memoryHandlers)
     {
-        readonly Bot bot = new(llm, memoryHandlers);
+        readonly Bot bot = new(llm, memoryHandlers, Settings.instance is null ? 60 : Settings.instance.RespondToThought); 
 
         public async Task BeginLoop()
         {

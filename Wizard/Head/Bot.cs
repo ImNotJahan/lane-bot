@@ -5,7 +5,7 @@ using Wizard.Utility;
 
 namespace Wizard.Head
 {
-    public sealed class Bot(ILLM llm, List<IMemoryHandler> memoryHandlers)
+    public sealed class Bot(ILLM llm, List<IMemoryHandler> memoryHandlers, int respondToMessage)
     {
         public delegate void     OnEvent(string text);
         public event    OnEvent? OnHadGoodThought;
@@ -18,7 +18,7 @@ namespace Wizard.Head
 
         // any time the bot recieves a message, there is a fixed interval between
         // that message and the next time it has a thought, as set below
-        const int TimeBetweenMessageAndThought = 60;
+        readonly int timeBetweenMessageAndThought = respondToMessage;
 
         bool recievedMessageRecently = false;
 
@@ -277,7 +277,7 @@ namespace Wizard.Head
                     {
                         recievedMessageRecently = false;
                         
-                        timeUntilThought = TimeBetweenMessageAndThought; 
+                        timeUntilThought = timeBetweenMessageAndThought; 
                     }
                 }
             }
