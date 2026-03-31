@@ -62,8 +62,8 @@ namespace Wizard.Head
             foreach(string url in imageUrls) await RememberMessage(new(url, Author.User, MessageType.Image));
 
             MessageContainer       formattedMessage = new($"{author} says: {message}");
-            List<MessageContainer> context          = await AssembleContext(formattedMessage);
-            float                  enthusiasm       = await Enthusiasm(context, formattedMessage);
+            List<MessageContainer> recentMessages   = await AssembleContext(formattedMessage, true, false);
+            float                  enthusiasm       = await Enthusiasm(recentMessages, formattedMessage);
 
             if(enthusiasm <= 0.2f)
             {
@@ -145,10 +145,12 @@ namespace Wizard.Head
                     if(message.GetMessageType() == MessageType.Text)    formattedContext += "Lane says: ";
                     if(message.GetMessageType() == MessageType.Thought) formattedContext += "Lane thinks: ";
                 }
-                formattedContext += message.GetContent();
+
+                formattedContext += message.ToString();
+                formattedContext += "\n";
             }
 
-            return string.Join("\n", context.Select(m => m.GetContent()));
+            return formattedContext;
         }
 
         private async Task<float> Enthusiasm(List<MessageContainer> context, MessageContainer message)
