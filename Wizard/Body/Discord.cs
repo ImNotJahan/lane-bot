@@ -31,7 +31,7 @@ namespace Wizard.Body
 
             exclusiveToChannel = Settings.instance is not null && Settings.instance.ExclusiveToChannel == true;
 
-            bot = new(llm, memoryHandlers);
+            bot = new(llm, memoryHandlers, Settings.instance is null ? 60 : Settings.instance.RespondToThought);
 
             bot.OnHadGoodThought += OnHadGoodThought;
 

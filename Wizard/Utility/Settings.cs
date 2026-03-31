@@ -9,6 +9,7 @@ namespace Wizard.Utility
         public          bool              ExclusiveToChannel    { get; set; }
         public required TimezoneSettings  TimezoneSettings      { get; set; }
         public required string            LoggingLevel          { get; set; }
+        public required int               RespondToThought      { get; set; }
     }
 
     public sealed class HandlerSettings
