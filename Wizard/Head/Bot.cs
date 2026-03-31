@@ -16,6 +16,10 @@ namespace Wizard.Head
 
         int timeUntilThought = 10;
 
+        // any time the bot recieves a message, there is a fixed interval between
+        // that message and the next time it has a thought, as set below
+        const int TimeBetweenMessageAndThought = 60;
+
         bool recievedMessageRecently = false;
 
         private async Task<List<MessageContainer>> AssembleContext(MessageContainer? message)
@@ -132,8 +136,14 @@ namespace Wizard.Head
             return enthusiasm;
         }
 
+        bool monologueRunning = false;
+
         public void StartMonologue()
         {
+            if(monologueRunning) return;
+
+            monologueRunning = true;
+
             _ = MonologueHandler();
         }
         
@@ -141,78 +151,89 @@ namespace Wizard.Head
         {
             try
             {
+                Logger.LogInformation("Starting monologue...");
+                
                 await Monologue();
             } catch(Exception exception)
             {
                 Logger.LogError(exception.ToString());
-            }    
+            } finally
+            {
+                Logger.LogWarning("Monologue stopped running");
+
+                monologueRunning = false;
+            }
         }
 
         MessageContainer? lastThought = null;
 
         private async Task Monologue()
         {
-            Logger.LogInformation("Starting monologue...");
-
-            string formattedContext  = ContextToString(await AssembleContext(lastThought));
-
-            string prompt = string.Format(
-                Prompts.GetPrompt("Monologue"),
-                formattedContext,
-                DateTime.UtcNow.ToString("yyyy/MM/dd HH:mm:ss")
-            );
-
-            MessageContainer response = await llm.Prompt([new(prompt)], "");
-
-            JObject data;
-
-            if(response.GetContent() == "") throw new Exception("Response was empty");
-
-            try
+            while(true)
             {
-                string toParse = response.GetContent();
+                string formattedContext = ContextToString(await AssembleContext(lastThought));
 
-                toParse = toParse.Replace("```json", "").Replace("```", "");
+                string prompt = string.Format(
+                    Prompts.GetPrompt("Monologue"),
+                    formattedContext,
+                    DateTime.UtcNow.ToString("yyyy/MM/dd HH:mm:ss")
+                );
 
-                data = JObject.Parse(toParse);
-            } catch(Exception exception)
-            {
-                throw new InvalidMonologue(exception.ToString());
-            }
+                MessageContainer response = await llm.Prompt([new(prompt)], "");
 
-            timeUntilThought = (int?) data["next_thought_in_seconds"] 
-                            ?? throw new InvalidMonologue("Did not have next_thought_in_seconds property");
+                if(response.GetContent() == "") throw new Exception("Response was empty");
 
-            string thought = (string?) data["thought"]
-                          ?? throw new InvalidMonologue("Did not have thought property");
-            
-            Logger.LogInformation("Thought " + thought);
-            Logger.LogInformation($"Will think again in {timeUntilThought} seconds");
+                JObject data;
 
-            lastThought = new(thought, Author.Bot, MessageType.Thought);
-
-            await RememberMessage(lastThought);
-
-            if((bool?) data["speak"] == true)
-            {
-                Logger.LogInformation("Will verbalize from monologue: " + (string?) data["message"]);
-                OnHadGoodThought?.Invoke((string?) data["message"] ?? throw new InvalidMonologue("Did not have message"));
-            }
-
-            while(timeUntilThought > 0)
-            {
-                await Task.Delay(1000);
-
-                timeUntilThought--;
-
-                if (recievedMessageRecently)
+                try
                 {
-                    recievedMessageRecently = false;
-                    break;
-                }
-            }
+                    string toParse = response.GetContent();
 
-            await Monologue();
+                    // since we tell llm to respond in json, sometimes it will wrap
+                    // response in these, which we don't want
+                    toParse = toParse.Replace("```json", "").Replace("```", "");
+
+                    data = JObject.Parse(toParse);
+                } catch(Exception exception)
+                {
+                    throw new InvalidMonologue(exception.ToString());
+                }
+
+                timeUntilThought = (int?) data["next_thought_in_seconds"]
+                                ?? throw new InvalidMonologue("Did not have next_thought_in_seconds property");
+
+                string thought = (string?) data["thought"]
+                              ?? throw new InvalidMonologue("Did not have thought property");
+
+                Logger.LogInformation("Thought " + thought);
+                Logger.LogInformation($"Will think again in {timeUntilThought} seconds");
+
+                lastThought = new(thought, Author.Bot, MessageType.Thought);
+
+                await RememberMessage(lastThought);
+
+                if((bool?) data["speak"] == true)
+                {
+                    Logger.LogInformation("Will verbalize from monologue: " + (string?) data["message"]);
+                    OnHadGoodThought?.Invoke((string?) data["message"] ?? throw new InvalidMonologue("Did not have message"));
+                }
+
+                while(timeUntilThought > 0)
+                {
+                    await Task.Delay(1000);
+
+                    timeUntilThought--;
+
+                    if(recievedMessageRecently)
+                    {
+                        recievedMessageRecently = false;
+                        
+                        timeUntilThought = TimeBetweenMessageAndThought; 
+                    }
+                }
+
+                WriteData();
+            }
         }
 
         private class InvalidRouterValue(string value) : Exception($"Router responded incorrectly: {value}") {}

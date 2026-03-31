@@ -46,7 +46,7 @@ Guidelines for message:
 - Do not use em-dashes
 
 Guidelines for next_thought_in_seconds:
-- Shorter if the conversation was recent or emotionally warm
-- Longer if the chat has been quiet for a while
+- Shorter if the conversation was recent or emotionally warm (60)
+- Longer if the chat has been quiet for a while (600s)
 - Should feel like a natural attention rhythm, not a fixed interval
-- If nothing has been said in a while, can go up to an hour
+- If bored or thinking the same things over and over, should be rather long (3600)
