@@ -22,13 +22,22 @@ namespace Wizard.Head
 
         bool recievedMessageRecently = false;
 
-        private async Task<List<MessageContainer>> AssembleContext(MessageContainer? message)
+        private async Task<List<MessageContainer>> AssembleContext(
+            MessageContainer? message,
+            bool recentMessages = true,
+            bool nonrecentMessages = true
+        )
         {
             List<MessageContainer> context = [];
 
-            foreach(IMemoryHandler handler in memoryHandlers) context.AddRange(await handler.RecallMemory(message));
+            foreach(IMemoryHandler handler in memoryHandlers) 
+            {
+                // we only add a handler's recall to the context if it matches
+                // the criteria (recent, nonrecent) specified by header
+                if((handler.IsRecent() && !recentMessages) || (!handler.IsRecent() && !nonrecentMessages)) continue;
 
-            if(message is not null) context.Add(message);
+                context.AddRange(await handler.RecallMemory(message));
+            }
 
             return context;
         }
@@ -54,19 +63,21 @@ namespace Wizard.Head
 
             MessageContainer       formattedMessage = new($"{author} says: {message}");
             List<MessageContainer> context          = await AssembleContext(formattedMessage);
-            float                  enthusiasm       = await Enthusiasm(context);
+            float                  enthusiasm       = await Enthusiasm(context, formattedMessage);
 
             if(enthusiasm <= 0.2f)
             {
                 Logger.LogInformation($"Decided not to respond to message (enthusiasm {enthusiasm})");
 
                 await RememberMessage(formattedMessage);
+                WriteData();
+
                 return null;
             }
 
             Logger.LogInformation($"Decided to respond to message (enthusiasm {enthusiasm})");
 
-            MessageContainer response = await RespondToMessage(context, enthusiasm);
+            MessageContainer response = await RespondToMessage(formattedMessage, enthusiasm);
 
             Logger.LogInformation("Will respond with {0}", response.GetContent());
 
@@ -82,26 +93,44 @@ namespace Wizard.Head
         {
             JObject data = [];
 
-            foreach(IMemoryHandler handler in memoryHandlers)
+            try
             {
-                data[handler.GetType().ToString()] = handler.Serialize();
-            }
+                foreach(IMemoryHandler handler in memoryHandlers)
+                {
+                    data[handler.GetType().ToString()] = handler.Serialize();
+                }
 
-            JSONWriter.WriteData(data);
+                JSONWriter.WriteData(data);
+            } catch(Exception exception)
+            {
+                Logger.LogError(exception.ToString());
+            }
         }
 
-        private async Task<MessageContainer> RespondToMessage(List<MessageContainer> context, float enthusiasm)
+        private async Task<MessageContainer> RespondToMessage(MessageContainer message, float enthusiasm)
         {
+            string memoryContext       = ContextToString(await AssembleContext(message, false, true));
+            string conversationContext = ContextToString(await AssembleContext(message, true,  false));
+
             string enthusiasmContext = enthusiasm switch
             {
                 >= 0.8f => "high",
                 >= 0.5f => "neutral",
                 _       => "low"
             };
+
+            string prompt = string.Format(
+                Prompts.GetPrompt("Respond"),
+                memoryContext,
+                conversationContext,
+                enthusiasmContext
+            );
+
+            Logger.LogDebug("Responding to message with prompt: " + prompt);
             
             return await llm.Prompt(
-                context,
-                string.Format(Prompts.GetPrompt("Respond"), enthusiasmContext)
+                [message],
+                prompt
             );
         }
 
@@ -122,14 +151,14 @@ namespace Wizard.Head
             return string.Join("\n", context.Select(m => m.GetContent()));
         }
 
-        private async Task<float> Enthusiasm(List<MessageContainer> context)
+        private async Task<float> Enthusiasm(List<MessageContainer> context, MessageContainer message)
         {
             string formattedContext = ContextToString(context);
             string prompt           = string.Format(Prompts.GetPrompt("Routing"), formattedContext);
 
             Logger.LogDebug("Gauging enthusiasm with prompt: " + formattedContext);
 
-            string result = (await llm.Prompt([context[^1]], prompt)).GetContent();
+            string result = (await llm.Prompt([message], prompt)).GetContent();
 
             if(!float.TryParse(result, out float enthusiasm)) throw new InvalidRouterValue(result);
 
@@ -152,7 +181,7 @@ namespace Wizard.Head
             try
             {
                 Logger.LogInformation("Starting monologue...");
-                
+
                 await Monologue();
             } catch(Exception exception)
             {
@@ -171,13 +200,17 @@ namespace Wizard.Head
         {
             while(true)
             {
-                string formattedContext = ContextToString(await AssembleContext(lastThought));
+                string memoryContext       = ContextToString(await AssembleContext(lastThought, false, true));
+                string conversationContext = ContextToString(await AssembleContext(lastThought, true,  false));
 
                 string prompt = string.Format(
                     Prompts.GetPrompt("Monologue"),
-                    formattedContext,
+                    memoryContext,
+                    conversationContext,
                     DateTime.UtcNow.ToString("yyyy/MM/dd HH:mm:ss")
                 );
+
+                Logger.LogDebug("Monologuing with prompt: " + prompt);
 
                 MessageContainer response = await llm.Prompt([new(prompt)], "");
 
@@ -205,7 +238,7 @@ namespace Wizard.Head
                 string thought = (string?) data["thought"]
                               ?? throw new InvalidMonologue("Did not have thought property");
 
-                Logger.LogInformation("Thought " + thought);
+                Logger.LogInformation("[Thought] " + thought);
                 Logger.LogInformation($"Will think again in {timeUntilThought} seconds");
 
                 lastThought = new(thought, Author.Bot, MessageType.Thought);
@@ -217,6 +250,8 @@ namespace Wizard.Head
                     Logger.LogInformation("Will verbalize from monologue: " + (string?) data["message"]);
                     OnHadGoodThought?.Invoke((string?) data["message"] ?? throw new InvalidMonologue("Did not have message"));
                 }
+
+                WriteData();
 
                 while(timeUntilThought > 0)
                 {
@@ -231,8 +266,6 @@ namespace Wizard.Head
                         timeUntilThought = TimeBetweenMessageAndThought; 
                     }
                 }
-
-                WriteData();
             }
         }
 

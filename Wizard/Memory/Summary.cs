@@ -38,6 +38,8 @@ namespace Wizard.Memory
             Logger.LogInformation("Summarizing conversation as: " + summary.GetContent());
         }
 
+        public override bool IsRecent() => false;
+
         public override JToken Serialize()
         {
             return new JObject()

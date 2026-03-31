@@ -68,6 +68,9 @@ namespace Wizard.Memory
         {
             if(message is null) return [];
 
+            // what we do for this is we encode message into vectors, then send
+            // it off to our database to find similar messages
+
             IReadOnlyList<ScoredPoint> points = await qdrant.QueryAsync(
                 collectionName: CollectionName,
                 query:          await CalculateVectors(message),
@@ -87,14 +90,9 @@ namespace Wizard.Memory
             return messages;
         }
 
-        public JToken Serialize()
-        {
-            return new JObject();
-        }
+        public bool IsRecent() => false;
 
-        public void Deserialize(JToken data)
-        {
-            
-        }
+        public JToken Serialize() => new JObject();
+        public void   Deserialize(JToken data) {}
     }
 }

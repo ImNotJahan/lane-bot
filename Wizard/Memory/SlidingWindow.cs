@@ -18,6 +18,8 @@ namespace Wizard.Memory
             if(memory.Count > maxMessages) memory.RemoveAt(0);
         }
 
+        public virtual bool IsRecent() => true;
+
         public virtual JToken Serialize()
         {
             JArray serializedMemory = [];
