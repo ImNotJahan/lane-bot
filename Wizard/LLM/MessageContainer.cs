@@ -1,5 +1,6 @@
 using Anthropic.Models.Messages;
 using Newtonsoft.Json.Linq;
+using Wizard.Utility;
 
 namespace Wizard.LLM
 {
@@ -98,9 +99,22 @@ namespace Wizard.LLM
         {
             string formatted = GetContent();
 
-            formatted = "[" + time.ToString("yyyy/MM/dd HH:mm:ss") + "] " + formatted;
+            formatted = "[" + FormatTime(time) + "] " + formatted;
 
             return formatted;
+        }
+
+        /// <summary>
+        /// Formats time in the way that appears when a message is converted to
+        /// a string. Changes timezone as specified in settings
+        /// </summary>
+        /// <param name="time">The time to format</param>
+        /// <returns>The time formatted</returns>
+        public static string FormatTime(DateTime time)
+        {
+            return time.AddHours  (Settings.instance is null ? 0 : Settings.instance.TimezoneSettings.HourShift)
+                       .AddMinutes(Settings.instance is null ? 0 : Settings.instance.TimezoneSettings.MinuteShift)
+                       .ToString  ("yyyy/MM/dd HH:mm:ss");
         }
 
         public JToken Serialize()

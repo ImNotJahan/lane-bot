@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Newtonsoft.Json.Linq;
 using Wizard.LLM;
 using Wizard.Memory;
@@ -15,7 +14,7 @@ namespace Wizard.Head
 
         readonly List<IMemoryHandler> memoryHandlers = memoryHandlers;
 
-        int timeUntilThought = 10;
+        int timeUntilThought;
 
         // any time the bot recieves a message, there is a fixed interval between
         // that message and the next time it has a thought, as set below
@@ -214,7 +213,7 @@ namespace Wizard.Head
                 string dynamicPrompt       = string.Format(
                     Prompts.GetPrompt("Monologue_Dynamic"),
                     conversationContext,
-                    DateTime.UtcNow.ToString("yyyy/MM/dd HH:mm:ss")
+                    MessageContainer.FormatTime(DateTime.UtcNow)
                 );
 
                 Logger.LogDebug("Monologuing with dynamic prompt: " + dynamicPrompt);

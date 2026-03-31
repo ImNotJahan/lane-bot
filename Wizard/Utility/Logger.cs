@@ -4,16 +4,27 @@ namespace Wizard.Utility
 {
     public static class Logger
     {
-        const LogLevel MinimumLevel = LogLevel.Information;
-
         static readonly ILogger logger;
 
         static Logger()
         {
+            LogLevel minimumLevel = Settings.instance is null ? LogLevel.Information :
+                                    Settings.instance.LoggingLevel switch
+            {
+                "Debug"       => LogLevel.Debug,
+                "Information" => LogLevel.Information,
+                "Warning"     => LogLevel.Warning,
+                "Trace"       => LogLevel.Trace,
+                "Critical"    => LogLevel.Critical,
+                "Error"       => LogLevel.Error,
+                "None"        => LogLevel.None,
+                _             => throw new Exception("Invalid log level " + Settings.instance.LoggingLevel)
+            };
+
             using ILoggerFactory factory = LoggerFactory.Create(builder => 
             {
                 builder.AddConsole();
-                builder.SetMinimumLevel(MinimumLevel);
+                builder.SetMinimumLevel(minimumLevel);
             });
             
             logger = factory.CreateLogger("Program");

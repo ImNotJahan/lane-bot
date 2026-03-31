@@ -17,6 +17,8 @@ namespace Wizard
             
             Settings? settings = config.GetRequiredSection("Settings").Get<Settings>();
 
+            Settings.instance = settings;
+
             Body selectedBody;
 
             if(args.Length < 1) selectedBody = Body.Terminal;
@@ -113,18 +115,6 @@ namespace Wizard
         enum Body
         {
             Discord, Terminal
-        }
-
-        public sealed class Settings
-        {
-            public required HandlerSettings[] MemoryHandlers        { get; set; }
-            public required ulong             DefaultDiscordChannel { get; set; }
-        }
-
-        public sealed class HandlerSettings
-        {
-            public required string                  Handler { get; set; }
-            public required Dictionary<string, int> Args    { get; set; }
         }
     }
 }

@@ -4,6 +4,7 @@ using DSharpPlus.EventArgs;
 using Wizard.Head;
 using Wizard.LLM;
 using Wizard.Memory;
+using Wizard.Utility;
 
 namespace Wizard.Body
 {
@@ -15,6 +16,7 @@ namespace Wizard.Body
         DiscordChannel? recentChannel = null;
 
         readonly ulong defaultChannel;
+        readonly bool  exclusiveToChannel;
 
         public Discord(ILLM llm, List<IMemoryHandler> memoryHandlers, ulong defaultChannel)
         {
@@ -26,6 +28,8 @@ namespace Wizard.Body
             });
 
             this.defaultChannel = defaultChannel;
+
+            exclusiveToChannel = Settings.instance is not null && Settings.instance.ExclusiveToChannel == true;
 
             bot = new(llm, memoryHandlers);
 
@@ -74,6 +78,8 @@ namespace Wizard.Body
 
         private async Task OnMessageCreated(DiscordClient client, MessageCreateEventArgs args)
         {
+            if(exclusiveToChannel && args.Channel.Id != defaultChannel) return;
+
             recentChannel = args.Channel;
 
             if(args.Author.IsBot) return;
