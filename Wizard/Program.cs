@@ -55,7 +55,7 @@ namespace Wizard
                         case "RAG":
                             memoryHandlers.Add(new RAG(
                                 (ulong) handler.Args["SelectLimit"],
-                                        handler.Args["RecallInterval"]
+                                        handler.Args["WriteInterval"]
                             ));
                             break;
                         
