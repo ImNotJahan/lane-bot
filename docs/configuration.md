@@ -81,6 +81,10 @@ are as follows:
 - `"Critical"`
 - `"None"`
 
+### `"RespondToThought"`
+The interval, in seconds, between when the bot receives a message and when it should next think.
+Should be an integer.
+
 ### Example
 Here's what an example `appsettings.json` could look like:
 ```json
@@ -106,7 +110,8 @@ Here's what an example `appsettings.json` could look like:
             "HourShift":   0,
             "MinuteShift": 0
         },
-        "LoggingLevel": "Warning"
+        "LoggingLevel": "Warning",
+        "RespondToThought": 5
     }
 }
 ```
