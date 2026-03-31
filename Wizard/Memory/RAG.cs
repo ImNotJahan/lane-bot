@@ -1,4 +1,3 @@
-using Newtonsoft.Json.Linq;
 using Qdrant.Client;
 using Wizard.LLM;
 using OpenAI.Embeddings;
@@ -8,7 +7,7 @@ using Azure;
 
 namespace Wizard.Memory
 {
-    public sealed class RAG(ulong selectLimit, int recallInterval) : SlidingWindow(recallInterval)
+    public sealed class RAG(ulong selectLimit, int writeInterval) : SlidingWindow(writeInterval)
     {
         readonly QdrantClient qdrant = new(
             host:   DotNetEnv.Env.GetString("QDRANT_ENDPOINT"),
@@ -24,8 +23,6 @@ namespace Wizard.Memory
         private const string EmbeddingsModel = "text-embedding-3-small";
         private const string CollectionName  = "lane-rag";
 
-        List<MessageContainer> lastRecall = [];
-
         private async Task<float[]> CalculateVectors(MessageContainer message)
         {
             OpenAIEmbedding embedding = await embeddingClient.GenerateEmbeddingAsync(message.GetContent());
@@ -39,35 +36,37 @@ namespace Wizard.Memory
 
             await base.RememberMessage(message);
 
-            await qdrant.UpsertAsync(
-                collectionName: CollectionName,
-                [
-                    new()
-                    {
-                        Id = new() { Uuid = Guid.NewGuid().ToString() },
-                        Vectors = await CalculateVectors(message),
-                        Payload = {
-                            ["text"]   = message.GetContent(),
-                            ["author"] = (int) message.GetAuthor()
-                        }
+            if(memory.Count < maxMessages) return;
+
+            List<PointStruct> points = [];
+
+            foreach(MessageContainer m in memory)
+            {
+                points.Add(new()
+                {
+                    Id      = new() { Uuid = Guid.NewGuid().ToString() },
+                    Vectors = await CalculateVectors(m),
+                    Payload = {
+                        ["text"]   = m.GetContent(),
+                        ["author"] = (int) m.GetAuthor()
                     }
-                ]
-            );
+                });
+            }
+
+            await qdrant.UpsertAsync(CollectionName, points);
+
+            memory.Clear();
         }
 
         public override async Task<List<MessageContainer>> RecallMemory(MessageContainer? message)
         {
             if(message is null) return [];
 
-            if(memory.Count < maxMessages) return lastRecall;
-
             IReadOnlyList<ScoredPoint> points = await qdrant.QueryAsync(
                 collectionName: CollectionName,
                 query:          await CalculateVectors(message),
                 limit:          selectLimit
             );
-
-            memory.Clear();
 
             List<MessageContainer> messages = [];
 
@@ -79,14 +78,9 @@ namespace Wizard.Memory
                 ));
             }
 
-            lastRecall = messages;
-
             return messages;
         }
 
         public override bool IsRecent() => false;
-
-        public override JToken Serialize() => new JObject();
-        public override void   Deserialize(JToken data) {}
     }
 }

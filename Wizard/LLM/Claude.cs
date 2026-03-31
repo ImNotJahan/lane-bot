@@ -77,7 +77,7 @@ namespace Wizard.LLM
                 }
             }
 
-            Logger.LogDebug(
+            Logger.LogInformation(
                 "Token usage — input: {0}, output: {1}, cache write: {2}, cache read: {3}",
                 response.Usage.InputTokens,
                 response.Usage.OutputTokens,

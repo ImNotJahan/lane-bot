@@ -37,7 +37,7 @@ about some `MemoryHandler`. Each entry should look like so:
     "Handler": "RAG",
     "Args": {
         "SelectLimit":    10,
-        "RecallInterval": 10
+        "WriteInterval": 10
     }
 }
 ```
@@ -54,7 +54,7 @@ There are currently three `MemoryHandler`s which can be used, listed below:
     - Stores all messages in a vector database and retrieves similar messages to that received in a conversation
     - Args should consist of two fields
         1. `"SelectLimit"`: an integer denoting how many messages it should retrieve in comparison
-        2. `"RecallInterval"`: an integer denoting how often it should push new messages to the database
+        2. `"WriteInterval"`: an integer denoting how often it should push new messages to the database
 
 ### `"DefaultDiscordChannel"`
 If using the Discord body, this is the channel ID which the bot will voice its thoughts in if it
