@@ -261,8 +261,11 @@ namespace Wizard.Head
 
                 if((bool?) data["speak"] == true)
                 {
-                    Logger.LogInformation("Will verbalize from monologue: " + (string?) data["message"]);
-                    OnHadGoodThought?.Invoke((string?) data["message"] ?? throw new InvalidMonologue("Did not have message"));
+                    string message = (string?) data["message"] ?? throw new InvalidMonologue("Did not have message");
+                    Logger.LogInformation("Will verbalize from monologue: " + message);
+                    OnHadGoodThought?.Invoke(message);
+
+                    await RememberMessage(new(message, Author.Bot));
                 }
 
                 WriteData();
