@@ -1,4 +1,6 @@
+using Karambolo.Extensions.Logging.File;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Console;
 
 namespace Wizard.Utility
 {
@@ -8,8 +10,42 @@ namespace Wizard.Utility
 
         static Logger()
         {
-            LogLevel minimumLevel = Settings.instance is null ? LogLevel.Information :
-                                    Settings.instance.LoggingLevel switch
+            LoggingSettings settings;
+
+            if(Settings.instance is null)
+            {
+                settings = new()
+                {
+                    ConsoleLevel = "Warning",
+                    FileLevel    = "Debug",
+                    FileLogPath  = "lane.log"
+                };
+            }
+            else
+            {
+                settings = Settings.instance.Logging;
+            }
+
+            ILoggerFactory factory = LoggerFactory.Create(builder => 
+            {
+                builder.SetMinimumLevel(LogLevel.Debug);
+                
+                builder.AddConsole()
+                       .AddFilter<ConsoleLoggerProvider>(null, StringToLogLevel(settings.ConsoleLevel));
+                
+                builder.AddFile(options =>
+                {
+                    options.RootPath = AppContext.BaseDirectory;
+                    options.Files    = [new LogFileOptions { Path = settings.FileLogPath }];
+                }).AddFilter<FileLoggerProvider>(null, StringToLogLevel(settings.FileLevel));
+            });
+
+            logger = factory.CreateLogger("Program");
+        }
+
+        private static LogLevel StringToLogLevel(string level)
+        {
+            return level switch
             {
                 "Debug"       => LogLevel.Debug,
                 "Information" => LogLevel.Information,
@@ -18,16 +54,8 @@ namespace Wizard.Utility
                 "Critical"    => LogLevel.Critical,
                 "Error"       => LogLevel.Error,
                 "None"        => LogLevel.None,
-                _             => throw new Exception("Invalid log level " + Settings.instance.LoggingLevel)
+                _             => throw new Exception("Invalid log level " + level)
             };
-
-            using ILoggerFactory factory = LoggerFactory.Create(builder => 
-            {
-                builder.AddConsole();
-                builder.SetMinimumLevel(minimumLevel);
-            });
-            
-            logger = factory.CreateLogger("Program");
         }
 
         public static void LogInformation(string? message, params object[] args) => logger.LogInformation(message, args);
