@@ -8,8 +8,8 @@ namespace Wizard.Utility
         public required ulong             DefaultDiscordChannel { get; set; }
         public          bool              ExclusiveToChannel    { get; set; }
         public required TimezoneSettings  TimezoneSettings      { get; set; }
-        public required string            LoggingLevel          { get; set; }
         public required int               RespondToThought      { get; set; }
+        public required LoggingSettings   Logging               { get; set; }
     }
 
     public sealed class HandlerSettings
@@ -22,5 +22,12 @@ namespace Wizard.Utility
     {
         public required int HourShift   { get; set; }
         public required int MinuteShift { get; set; }
+    }
+
+    public sealed class LoggingSettings
+    {
+        public required string ConsoleLevel { get; set; }
+        public required string FileLevel    { get; set; }
+        public required string FileLogPath  { get; set; }
     }
 }

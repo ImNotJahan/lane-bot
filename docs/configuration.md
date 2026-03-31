@@ -70,9 +70,13 @@ This block has two fields:
 1. `"HourShift"`: integer denoting hour shift from UTC the bot should use
 2. `"MinuteShift"`: integer denoting minute shift from UTC the bot should use
 
-### `"LoggingLevel"`
-The minimum level a logged message should have to be outputted. The possible values
-are as follows:
+### `"Logging"`
+This is a block specifying how logging should be handled. It has three fields:
+1. `"ConsoleLevel"`: the minimum level a logged message should have to be outputted to the console.
+2. `"FileLevel"`: the minimum level a logged message should have to be outtputed to the log file.
+3. `"FileLogPath"`: the path to the file to log to.
+
+The possible values for a logging level are as follows:
 - `"Trace"`
 - `"Debug"`
 - `"Information"`
@@ -110,8 +114,12 @@ Here's what an example `appsettings.json` could look like:
             "HourShift":   0,
             "MinuteShift": 0
         },
-        "LoggingLevel": "Warning",
-        "RespondToThought": 5
+        "RespondToThought": 5,
+        "Logging": {
+            "ConsoleLevel": "Warning",
+            "FileLevel":    "Debug",
+            "FileLogPath":  "wizard.log"
+        }
     }
 }
 ```
