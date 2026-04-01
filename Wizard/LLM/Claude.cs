@@ -63,6 +63,8 @@ namespace Wizard.LLM
             string                 dynamicPrompt       = ""
         )
         {
+            Logger.LogDebug("Prompting Claude with cached dynamic prompt:" + cachedDynamicPrompt);
+
             Message response = await client.Messages.Create(CreateParams(
                 context, systemPrompt, cachedDynamicPrompt, dynamicPrompt
             ));
