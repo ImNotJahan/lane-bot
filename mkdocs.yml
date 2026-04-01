@@ -1,0 +1,16 @@
+site_name: Lane Documentation
+site_description: Documentation for Lane, a chatbot designed to feel authentic.
+site_url: https://lane.readthedocs.io
+
+docs_dir: Docs
+
+theme:
+  name: shadcn
+
+nav:
+  - Home: index.md
+  - Getting Started: getting_started.md
+  - Configuration: configuration.md
+  - Theory: theory.md
+
+repo_url: https://github.com/imnotjahan/lane-bot
