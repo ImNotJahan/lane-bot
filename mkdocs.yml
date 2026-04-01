@@ -1,6 +1,6 @@
 site_name: Lane Documentation
 site_description: Documentation for Lane, a chatbot designed to feel authentic.
-site_url: https://lane.readthedocs.io
+site_url: https://lane.readthedocs.io/en/latest/
 
 docs_dir: Docs
 
