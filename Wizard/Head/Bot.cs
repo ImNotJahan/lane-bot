@@ -198,6 +198,8 @@ namespace Wizard.Head
 
                 monologueRunning = false;
             }
+
+            _ = MonologueHandler();
         }
 
         MessageContainer? lastThought = null;
