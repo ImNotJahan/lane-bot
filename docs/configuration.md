@@ -6,7 +6,8 @@
     - [`"DefaultDiscordChannel"`](#defaultdiscordchannel)
     - [`"ExclusiveToChannel"`](#exclusivetochannel)
     - [`"TimezoneSettings"`](#timezonesettings)
-    - [`"LoggingLevel"`](#logginglevel)
+    - [`"Logging"`](#logging)
+    - [`"RespondToThought"`](#respondtothought)
     - [Example](#example)
 
 ## .env
