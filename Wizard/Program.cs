@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json.Linq;
 using Wizard.Body;
+using Wizard.Head;
 using Wizard.LLM;
 using Wizard.Memory;
 using Wizard.Utility;
@@ -21,7 +22,19 @@ namespace Wizard
 
             Body selectedBody;
 
-            if(args.Length < 1) selectedBody = Body.Terminal;
+            if(args.Length < 1)
+            {
+                if(settings is null) selectedBody = Body.Terminal;
+                else
+                {
+                    selectedBody = settings.Body switch
+                    {
+                        "Discord"  => Body.Discord,
+                        "Terminal" => Body.Terminal,
+                        _          => throw new Exception($"Unknown body type {settings.Body}")
+                    };
+                }
+            }
             else
             {
                 selectedBody = args[0] switch
@@ -36,39 +49,41 @@ namespace Wizard
 
             ILLM llm = new Claude();
 
-            List<IMemoryHandler> memoryHandlers = [];
+            Dictionary<string, IMemoryHandler> memoryHandlers = [];
+
+            Bot bot = new(llm, memoryHandlers, Settings.instance is null ? 60 : Settings.instance.RespondToThought);
 
             if(settings is null)
             {
-                memoryHandlers = [
-                    new Summary(10, llm),
-                    new RAG(10, 10),
-                    new SlidingWindow(10)
-                ];
+                Logger.LogWarning("No settings file found");
+
+                memoryHandlers["SlidingWindow"] = new SlidingWindow(10, false);
             }
             else
             {
                 foreach(HandlerSettings handler in settings.MemoryHandlers)
                 {
+                    string id = handler.ID;
                     switch (handler.Handler)
                     {
                         case "RAG":
-                            memoryHandlers.Add(new RAG(
+                            memoryHandlers.Add(id, new RAG(
                                 (ulong) handler.Args["SelectLimit"],
                                         handler.Args["WriteInterval"]
                             ));
                             break;
                         
                         case "Summary":
-                            memoryHandlers.Add(new Summary(
+                            memoryHandlers.Add(id, new Summary(
                                 handler.Args["UpdateInterval"], 
                                 llm
                             ));
                             break;
                         
                         case "SlidingWindow":
-                            memoryHandlers.Add(new SlidingWindow(
-                                handler.Args["MaxMessages"]
+                            memoryHandlers.Add(id, new SlidingWindow(
+                                handler.Args["MaxMessages"],
+                                handler.Args["ForThoughts"] == 1
                             ));
                             break;
                         
@@ -85,7 +100,7 @@ namespace Wizard
                 
                 foreach (KeyValuePair<string, JToken?> pair in data)
                 {
-                    IMemoryHandler? handler = memoryHandlers.Find((x) => x.GetType().ToString() == pair.Key);
+                    IMemoryHandler? handler = memoryHandlers[pair.Key];
 
                     if(handler is null)    continue;
                     if(pair.Value is null) continue;
@@ -97,7 +112,7 @@ namespace Wizard
             if(selectedBody == Body.Discord)
             {
                 ulong   defaultChannel = settings?.DefaultDiscordChannel ?? 0;
-                Discord discord        = new(llm, memoryHandlers, defaultChannel);
+                Discord discord        = new(bot, defaultChannel);
 
                 await discord.ConnectAsync();
 
@@ -106,7 +121,7 @@ namespace Wizard
                 await Task.Delay(-1);
             } else if(selectedBody == Body.Terminal)
             {
-                Terminal terminal = new(llm, memoryHandlers);
+                Terminal terminal = new(bot);
 
                 await terminal.BeginLoop();
             }

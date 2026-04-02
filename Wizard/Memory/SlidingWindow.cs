@@ -3,16 +3,20 @@ using Wizard.LLM;
 
 namespace Wizard.Memory
 {
-    public class SlidingWindow(int maxMessages) : IMemoryHandler
+    public class SlidingWindow(int maxMessages, bool forThoughts = false) : IMemoryHandler
     {
         protected readonly List<MessageContainer> memory = [];
         
-        protected readonly int maxMessages = maxMessages;
+        protected readonly int  maxMessages = maxMessages;
+        protected readonly bool forThoughts = forThoughts;
 
         public async virtual Task<List<MessageContainer>> RecallMemory(MessageContainer? message) => memory;
 
         public virtual async Task RememberMessage(MessageContainer message)
         {
+            if(forThoughts  && message.GetMessageType() != MessageType.Thought) return;
+            if(!forThoughts && message.GetMessageType() == MessageType.Thought) return;
+
             memory.Add(message);
 
             if(memory.Count > maxMessages) memory.RemoveAt(0);

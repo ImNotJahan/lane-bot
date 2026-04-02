@@ -10,10 +10,12 @@ namespace Wizard.Utility
         public required TimezoneSettings  TimezoneSettings      { get; set; }
         public required int               RespondToThought      { get; set; }
         public required LoggingSettings   Logging               { get; set; }
+        public required string            Body                  { get; set; }
     }
 
     public sealed class HandlerSettings
     {
+        public required string                  ID      { get; set; }
         public required string                  Handler { get; set; }
         public required Dictionary<string, int> Args    { get; set; }
     }

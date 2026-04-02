@@ -5,14 +5,14 @@ using Wizard.Utility;
 
 namespace Wizard.Head
 {
-    public sealed class Bot(ILLM llm, List<IMemoryHandler> memoryHandlers, int respondToMessage)
+    public sealed class Bot(ILLM llm, Dictionary<string, IMemoryHandler> memoryHandlers, int respondToMessage)
     {
         public delegate void     OnEvent(string text);
         public event    OnEvent? OnHadGoodThought;
 
         readonly ILLM llm = llm;
 
-        readonly List<IMemoryHandler> memoryHandlers = memoryHandlers;
+        readonly Dictionary<string, IMemoryHandler> memoryHandlers = memoryHandlers;
 
         int timeUntilThought;
 
@@ -30,7 +30,7 @@ namespace Wizard.Head
         {
             List<MessageContainer> context = [];
 
-            foreach(IMemoryHandler handler in memoryHandlers) 
+            foreach(IMemoryHandler handler in memoryHandlers.Values) 
             {
                 // we only add a handler's recall to the context if it matches
                 // the criteria (recent, nonrecent) specified by header
@@ -46,7 +46,7 @@ namespace Wizard.Head
         {
             Logger.LogDebug("Remembering message {0}", message.GetContent());
 
-            foreach(IMemoryHandler handler in memoryHandlers) await handler.RememberMessage(message);
+            foreach(IMemoryHandler handler in memoryHandlers.Values) await handler.RememberMessage(message);
         }
 
         public async Task<MessageContainer?> OnMessageCreated(
@@ -95,9 +95,9 @@ namespace Wizard.Head
 
             try
             {
-                foreach(IMemoryHandler handler in memoryHandlers)
+                foreach(KeyValuePair<string, IMemoryHandler> pair in memoryHandlers)
                 {
-                    data[handler.GetType().ToString()] = handler.Serialize();
+                    data[pair.Key] = pair.Value.Serialize();
                 }
 
                 JSONWriter.WriteData(data);

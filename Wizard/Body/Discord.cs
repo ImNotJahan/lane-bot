@@ -3,7 +3,6 @@ using DSharpPlus.Entities;
 using DSharpPlus.EventArgs;
 using Wizard.Head;
 using Wizard.LLM;
-using Wizard.Memory;
 using Wizard.Utility;
 
 namespace Wizard.Body
@@ -18,7 +17,7 @@ namespace Wizard.Body
         readonly ulong defaultChannel;
         readonly bool  exclusiveToChannel;
 
-        public Discord(ILLM llm, List<IMemoryHandler> memoryHandlers, ulong defaultChannel)
+        public Discord(Bot bot, ulong defaultChannel)
         {
             client = new DiscordClient(new DiscordConfiguration()
             {
@@ -31,7 +30,7 @@ namespace Wizard.Body
 
             exclusiveToChannel = Settings.instance is not null && Settings.instance.ExclusiveToChannel == true;
 
-            bot = new(llm, memoryHandlers, Settings.instance is null ? 60 : Settings.instance.RespondToThought);
+            this.bot = bot;
 
             bot.OnHadGoodThought += OnHadGoodThought;
 
@@ -82,7 +81,7 @@ namespace Wizard.Body
 
             recentChannel = args.Channel;
 
-            if(args.Author.IsBot) return;
+            if(args.Author.IsCurrent) return;
 
             List<string> imageUrls = [];
 

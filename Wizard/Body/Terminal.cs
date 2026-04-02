@@ -1,14 +1,11 @@
-using Newtonsoft.Json.Linq;
 using Wizard.Head;
 using Wizard.LLM;
-using Wizard.Memory;
-using Wizard.Utility;
 
 namespace Wizard.Body
 {
-    public sealed class Terminal(ILLM llm, List<IMemoryHandler> memoryHandlers)
+    public sealed class Terminal(Bot bot)
     {
-        readonly Bot bot = new(llm, memoryHandlers, Settings.instance is null ? 60 : Settings.instance.RespondToThought); 
+        readonly Bot bot = bot;
 
         public async Task BeginLoop()
         {

@@ -7,7 +7,7 @@ using Azure;
 
 namespace Wizard.Memory
 {
-    public sealed class RAG(ulong selectLimit, int writeInterval) : SlidingWindow(writeInterval)
+    public sealed class RAG(ulong selectLimit, int writeInterval) : SlidingWindow(writeInterval, false)
     {
         readonly QdrantClient qdrant = new(
             host:   DotNetEnv.Env.GetString("QDRANT_ENDPOINT"),
