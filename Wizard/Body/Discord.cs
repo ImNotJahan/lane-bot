@@ -1,7 +1,8 @@
-using DSharpPlus;
-using DSharpPlus.Entities;
-using DSharpPlus.EventArgs;
+using NetCord;
+using NetCord.Gateway;
+using NetCord.Gateway.Voice;
 using Wizard.Head;
+using Wizard.Head.Mouths;
 using Wizard.LLM;
 using Wizard.Utility;
 
@@ -9,97 +10,175 @@ namespace Wizard.Body
 {
     public sealed class Discord
     {
-        readonly DiscordClient client;
+        readonly GatewayClient client;
         readonly Bot           bot;
 
-        DiscordChannel? recentChannel = null;
+        ulong?       recentChannelId = null;
+        VoiceClient? voiceClient     = null;
 
-        readonly ulong defaultChannel;
-        readonly bool  exclusiveToChannel;
+        readonly ulong  defaultChannel;
+        readonly bool   exclusiveToChannel;
+        readonly IMouth mouth = new ElevenlabsTTS();
 
         public Discord(Bot bot, ulong defaultChannel)
         {
-            client = new DiscordClient(new DiscordConfiguration()
-            {
-                Token     = DotNetEnv.Env.GetString("DISCORD_API_KEY"),
-                TokenType = TokenType.Bot,
-                Intents   = DiscordIntents.AllUnprivileged | DiscordIntents.MessageContents
-            });
+            client = new GatewayClient(
+                new BotToken(DotNetEnv.Env.GetString("DISCORD_API_KEY")),
+                new GatewayClientConfiguration
+                {
+                    Intents = GatewayIntents.AllNonPrivileged | GatewayIntents.MessageContent
+                }
+            );
 
-            this.defaultChannel = defaultChannel;
+            this.defaultChannel    = defaultChannel;
+            exclusiveToChannel     = Settings.instance?.ExclusiveToChannel == true;
+            this.bot               = bot;
 
-            exclusiveToChannel = Settings.instance is not null && Settings.instance.ExclusiveToChannel == true;
-
-            this.bot = bot;
-
-            bot.OnHadGoodThought += OnHadGoodThought;
-
-            client.Ready          += OnReady;
-            client.MessageCreated += OnMessageCreated;
+            bot.OnHadGoodThought   += OnHadGoodThought;
+            client.Ready           += OnReady;
+            client.GuildCreate     += OnGuildCreate;
+            client.MessageCreate   += OnMessageCreate;
         }
 
-        private static string FormatMessage(MessageCreateEventArgs args)
+        public async Task ConnectAsync()
         {
-            string formatted = ResolveMentions(args);
+            await client.StartAsync();
+        }
 
-            if(args.Message.ReferencedMessage is not null)
+        private ValueTask OnReady(ReadyEventArgs args)
+        {
+            bot.StartMonologue();
+            return default;
+        }
+
+        private ValueTask OnGuildCreate(GuildCreateEventArgs args)
+        {
+            Guild? guild = args.Guild;
+
+            if (guild is null || !guild.Channels.ContainsKey(defaultChannel)) return default;
+
+            _ = Task.Run(() => ConnectVoiceAsync(guild));
+            return default;
+        }
+
+        private async Task ConnectVoiceAsync(Guild guild)
+        {
+            if (voiceClient is not null) return;
+
+            VoiceGuildChannel? voiceChannel = guild.Channels.Values
+                .OfType<VoiceGuildChannel>()
+                .FirstOrDefault();
+
+            if (voiceChannel is null)
             {
-                // is replying to a message
-                DiscordMessage replied = args.Message.ReferencedMessage;
-
-                formatted += $" in response to {replied.Author.Username}: {replied.Content}";
+                Logger.LogError("ConnectVoiceAsync: no voice channel in guild {Guild}", guild.Name);
+                return;
             }
 
-            return formatted;
-        }
-
-        private static string ResolveMentions(MessageCreateEventArgs args)
-        {
-            string content = args.Message.Content;
-
-            foreach (DiscordUser user in args.MentionedUsers)
-                content = content.Replace($"<@{user.Id}>", $"@{user.Username}")
-                                 .Replace($"<@!{user.Id}>", $"@{user.Username}");
-
-            return content;
-        }
-
-        private async Task OnReady(DiscordClient client, ReadyEventArgs args)
-        {
-            bot.StartMonologue();            
+            try
+            {
+                voiceClient = await client.JoinVoiceChannelAsync(guild.Id, voiceChannel.Id);
+                voiceClient.Disconnect += _ => { voiceClient = null; return default; };
+                await voiceClient.StartAsync();
+                Logger.LogInformation("Voice connected to {Channel}", voiceChannel.Name);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError("Voice connect failed: {Error}", ex.Message);
+            }
         }
 
         private async void OnHadGoodThought(string thought)
         {
-            if(recentChannel is not null) await client.SendMessageAsync(recentChannel, thought);
-            else await client.SendMessageAsync(await client.GetChannelAsync(defaultChannel), thought);
-        }
+            ulong channelId = recentChannelId ?? defaultChannel;
 
-        private async Task OnMessageCreated(DiscordClient client, MessageCreateEventArgs args)
-        {
-            if(exclusiveToChannel && args.Channel.Id != defaultChannel) return;
-
-            recentChannel = args.Channel;
-
-            if(args.Author.IsCurrent) return;
-
-            List<string> imageUrls = [];
-
-            foreach (DiscordAttachment attachment in args.Message.Attachments)
+            try
             {
-                if (attachment.MediaType?.StartsWith("image/") == true)
-                {
-                    imageUrls.Add(attachment.Url);
-                }
+                await client.Rest.SendMessageAsync(channelId, new() { Content = thought });
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError("SendMessage failed: {Error}", ex.Message);
             }
 
-            MessageContainer? response = await bot.OnMessageCreated(args.Author.Username, FormatMessage(args), imageUrls);
-
-            if(response is null) return;
-
-            await client.SendMessageAsync(args.Channel, response.GetContent());
+            if (voiceClient is not null)
+                await SpeakAsync(thought, voiceClient);
         }
 
-        public async Task ConnectAsync() => await client.ConnectAsync();
+        private ValueTask OnMessageCreate(Message message)
+        {
+            if (message.Author.IsBot) return default;
+            if (exclusiveToChannel && message.ChannelId != defaultChannel) return default;
+
+            recentChannelId    = message.ChannelId;
+            VoiceClient? audio = voiceClient;
+
+            _ = Task.Run(async () =>
+            {
+                List<string> imageUrls = [];
+                foreach (Attachment attachment in message.Attachments)
+                {
+                    if (attachment.ContentType?.StartsWith("image/") == true)
+                        imageUrls.Add(attachment.Url);
+                }
+
+                MessageContainer? response = await bot.OnMessageCreated(
+                    message.Author.Username,
+                    FormatMessage(message),
+                    imageUrls
+                );
+
+                if (response is null) return;
+
+                await client.Rest.SendMessageAsync(message.ChannelId, new() { Content = response.GetContent() });
+
+                if (audio is not null)
+                    await SpeakAsync(response.GetContent(), audio);
+            });
+
+            return default;
+        }
+
+        private async Task SpeakAsync(string text, VoiceClient vc)
+        {
+            try
+            {
+                byte[] pcm = await mouth.Speak(text);
+
+                await vc.EnterSpeakingStateAsync(new SpeakingProperties(SpeakingFlags.Microphone));
+
+                Stream voiceStream = vc.CreateVoiceStream();
+                using OpusEncodeStream opusStream = new(
+                    voiceStream,
+                    PcmFormat.Short,
+                    VoiceChannels.Stereo,
+                    OpusApplication.Voip
+                );
+                await opusStream.WriteAsync(pcm);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError("SpeakAsync failed: {Error}", ex.Message);
+            }
+        }
+
+        private static string FormatMessage(Message message)
+        {
+            string content = ResolveMentions(message);
+
+            if (message.ReferencedMessage is not null)
+                content += $" in response to {message.ReferencedMessage.Author.Username}: {message.ReferencedMessage.Content}";
+
+            return content;
+        }
+
+        private static string ResolveMentions(Message message)
+        {
+            string content = message.Content;
+            foreach (User user in message.MentionedUsers)
+                content = content.Replace($"<@{user.Id}>", $"@{user.Username}")
+                                 .Replace($"<@!{user.Id}>", $"@{user.Username}");
+            return content;
+        }
     }
 }

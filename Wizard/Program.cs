@@ -2,6 +2,7 @@
 using Newtonsoft.Json.Linq;
 using Wizard.Body;
 using Wizard.Head;
+using Wizard.Head.Mouths;
 using Wizard.LLM;
 using Wizard.Memory;
 using Wizard.Utility;
@@ -20,6 +21,8 @@ namespace Wizard
 
             Settings.instance = settings;
 
+            DotNetEnv.Env.TraversePath().Load();
+            
             Body selectedBody;
 
             if(args.Length < 1)
@@ -44,8 +47,6 @@ namespace Wizard
                     _          => throw new Exception($"Unknown body type {args[0]}")
                 };
             }
-
-            DotNetEnv.Env.TraversePath().Load();
 
             ILLM llm = new Claude();
 
@@ -111,8 +112,8 @@ namespace Wizard
 
             if(selectedBody == Body.Discord)
             {
-                ulong   defaultChannel = settings?.DefaultDiscordChannel ?? 0;
-                Discord discord        = new(bot, defaultChannel);
+                ulong                defaultChannel = settings?.DefaultDiscordChannel ?? 0;
+                Wizard.Body.Discord  discord        = new(bot, defaultChannel);
 
                 await discord.ConnectAsync();
 

@@ -1,12 +1,21 @@
 {
   "profiles": {
+    "Default": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "DYLD_LIBRARY_PATH": "/opt/homebrew/opt/opus/lib:/opt/homebrew/opt/libsodium/lib"
+      }
+    },
     "Terminal": {
       "commandName": "Project",
       "commandLineArgs": "terminal"
     },
     "Discord": {
       "commandName": "Project",
-      "commandLineArgs": "discord"
+      "commandLineArgs": "discord",
+      "environmentVariables": {
+        "DYLD_LIBRARY_PATH": "/opt/homebrew/opt/opus/lib:/opt/homebrew/opt/libsodium/lib"
+      }
     }
   }
 }
