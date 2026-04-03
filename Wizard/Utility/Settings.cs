@@ -11,6 +11,8 @@ namespace Wizard.Utility
         public required int               RespondToThought      { get; set; }
         public required LoggingSettings   Logging               { get; set; }
         public required string            Body                  { get; set; }
+        public          SpeechSettings?   Speech                { get; set; }
+        public          HearingSettings?  Hearing               { get; set; }
     }
 
     public sealed class HandlerSettings
@@ -31,5 +33,22 @@ namespace Wizard.Utility
         public required string ConsoleLevel { get; set; }
         public required string FileLevel    { get; set; }
         public required string FileLogPath  { get; set; }
+    }
+
+    public sealed class SpeechSettings
+    {
+        public required float  Tempo      { get; set; }
+        public required float  Pitch      { get; set; }
+        public required float  Rate       { get; set; }
+        public required string Mouth      { get; set; }
+        public required string Voice      { get; set; }
+        public required float  Stability  { get; set; }
+        public required float  Similarity { get; set; }
+        public required bool   Tune       { get; set; }
+    }
+
+    public sealed class HearingSettings
+    {
+        public required string Ear { get; set; }
     }
 }

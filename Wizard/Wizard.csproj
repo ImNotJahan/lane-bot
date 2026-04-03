@@ -10,6 +10,7 @@
   <ItemGroup>
     <PackageReference Include="Anthropic" Version="12.11.0" />
     <PackageReference Include="Azure.AI.OpenAI" Version="2.1.0" />
+    <PackageReference Include="Concentus" Version="2.2.2" />
     <PackageReference Include="DotNetEnv" Version="3.1.1" />
     <PackageReference Include="ElevenLabs-DotNet" Version="3.7.2" />
     <PackageReference Include="Json.Net" Version="1.0.33" />
@@ -24,6 +25,7 @@
     <PackageReference Include="NetCord.Services" Version="1.0.0-alpha.480" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="Qdrant.Client" Version="1.17.0" />
+    <PackageReference Include="SoundTouch.Net" Version="2.3.2" />
   </ItemGroup>
 
   <ItemGroup>
