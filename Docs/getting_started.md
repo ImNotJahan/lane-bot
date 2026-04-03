@@ -1,20 +1,24 @@
-# Getting started
+# Getting Started
 
 1. [Setup](#setup)
 2. [Configuration](#configuration)
 3. [Running](#running)
+4. [Next steps](#next-steps)
 
 ## Setup
-In order to get an instance of Lane up and running, you'll need a few things
-first.
 
-The only required thing is an API key for one of the supported LLMs. Currently this is only Anthropic LLMs, so you'll need a Claude API key.
+To get Lane running you'll need at minimum an Anthropic API key. Everything else depends on which features you want enabled.
 
-If you want to use the Discord body, you'll also need a Discord API key for an application with a bot.
+| Feature | Required keys/services |
+|---|---|
+| Core (LLM responses) | `ANTHROPIC_API_KEY` |
+| Discord | `DISCORD_API_KEY` (bot application) |
+| RAG memory | `QDRANT_API_KEY`, `QDRANT_ENDPOINT`, `OPENAI_EMBEDDING_API_KEY`, `OPENAI_EMBEDDING_ENDPOINT` |
+| Voice — TTS via ElevenLabs | `ELEVENLABS_KEY` |
+| Voice — TTS via Azure | `AZURE_KEY`, `AZURE_REGION` |
+| Voice — STT | `AZURE_KEY`, `AZURE_REGION` |
 
-Lastly, if you want to use the `RAG` memory handler, you'll need to get a Qdrant API key and an associated endpoint, and an OpenAI API key and endpoint for an embedding model.
-
-Once you have your keys (and possibly endpoints), you need to put them all in a `.env` file near whereever your binary is. The format should be as shown below:
+Once you have your keys, create a `.env` file in the root of the `Wizard` folder:
 
 ```
 DISCORD_API_KEY=
@@ -23,14 +27,72 @@ QDRANT_API_KEY=
 QDRANT_ENDPOINT=
 OPENAI_EMBEDDING_ENDPOINT=
 OPENAI_EMBEDDING_API_KEY=
+AZURE_KEY=
+AZURE_REGION=
+ELEVENLABS_KEY=
 ```
 
-For more information, take a look at the [.env documentation](configuration.md#env).
+Only populate the fields relevant to your setup — unused keys can be left blank or omitted. For full details see the [.env documentation](configuration.md#env).
 
 ## Configuration
-There are a number of settings you can configure. Notably, if you don't have all
-the things set up for a `RAG` memory handler, you wont want that in your configuration. For information on configuring your bot, check out the
-[appsettings.json documentation](configuration.md#appsettingsjson).
+
+Lane is configured via `appsettings.json` in the `Wizard` folder. The most important things to set for a first-time setup:
+
+- **`"Body"`** — set to `"Discord"` or `"Terminal"`. If omitted, defaults to `"Terminal"`.
+- **`"MemoryHandlers"`** — if you don't have Qdrant set up, don't include a `RAG` handler. A `SlidingWindow` is sufficient to get started.
+- **`"DefaultDiscordChannel"`** — required for Discord; the channel ID Lane uses for unprompted messages.
+
+A minimal working config for Discord looks like:
+
+```json
+{
+    "Settings": {
+        "MemoryHandlers": [
+            {
+                "Handler": "SlidingWindow",
+                "ID":      "MessageWindow",
+                "Args": {
+                    "MaxMessages": 10,
+                    "ForThoughts": 0
+                }
+            }
+        ],
+        "DefaultDiscordChannel": 0,
+        "ExclusiveToChannel": false,
+        "TimezoneSettings": {
+            "HourShift":   0,
+            "MinuteShift": 0
+        },
+        "RespondToThought": 5,
+        "Body": "Discord",
+        "Logging": {
+            "ConsoleLevel": "Information",
+            "FileLevel":    "Debug",
+            "FileLogPath":  "lane.log"
+        }
+    }
+}
+```
+
+For all configuration options including the `Speech` and `Hearing` blocks for voice, see [configuration.md](configuration.md).
 
 ## Running
-Just run the binary to start up the bot. You can use the command-line argument `discord` or `terminal` to specify which body to use- by default the terminal body will be used.
+
+Run the binary to start Lane. The body is determined by the `"Body"` field in `appsettings.json`, but can be overridden with a command-line argument:
+
+```
+./Wizard discord
+./Wizard terminal
+```
+
+**First run**: Lane starts with no memory and builds it up as conversations happen. Memory is persisted to a `data.json` file next to the binary after every message, so it survives restarts.
+
+**Discord**: Lane automatically joins the first voice channel in your server on startup if `Speech` or `Hearing` is configured. The monologue loop starts on connection, so Lane may send unprompted messages to `DefaultDiscordChannel` on her own.
+
+**Terminal**: a simple read-eval loop. Type a message and press enter. The monologue does not run in Terminal mode.
+
+## Next Steps
+
+- [Customization](customization.md) — how to edit Lane's personality, tone, and prompt files
+- [How it works](how_it_works.md) — the routing, monologue, and memory systems explained
+- [Configuration reference](configuration.md) — all `appsettings.json` fields documented

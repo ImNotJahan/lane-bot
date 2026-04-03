@@ -9,8 +9,11 @@ theme:
 
 nav:
   - Home: index.md
-  - Getting Started: getting_started.md
+  - Getting started: getting_started.md
   - Configuration: configuration.md
+  - Customization: customization.md
+  - How it works: how_it_works.md
+  - Interfaces: interfaces.md
   - Theory: theory.md
 
 repo_url: https://github.com/imnotjahan/lane-bot

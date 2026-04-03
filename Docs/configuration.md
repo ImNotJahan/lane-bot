@@ -8,6 +8,9 @@
     - [`"TimezoneSettings"`](#timezonesettings)
     - [`"Logging"`](#logging)
     - [`"RespondToThought"`](#respondtothought)
+    - [`"Body"`](#body)
+    - [`"Speech"`](#speech)
+    - [`"Hearing"`](#hearing)
     - [Example](#example)
 
 ## .env
@@ -20,11 +23,16 @@ QDRANT_API_KEY=
 QDRANT_ENDPOINT=
 OPENAI_EMBEDDING_ENDPOINT=
 OPENAI_EMBEDDING_API_KEY=
+AZURE_KEY=
+AZURE_REGION=
+ELEVENLABS_KEY=
 ```
 
 - `DISCORD_API_KEY` is needed iff using the Discord body
-- `ANTHROPIC_API_KEY` is needed iff using anthropic as LLM
+- `ANTHROPIC_API_KEY` is needed iff using Anthropic as LLM
 - `QDRANT_API_KEY`, `QDRANT_ENDPOINT`, `OPENAI_EMBEDDING_ENDPOINT`, and `OPENAI_EMBEDDING_API_KEY` are needed iff using RAG memory
+- `AZURE_KEY` and `AZURE_REGION` are needed iff using Azure for TTS or STT
+- `ELEVENLABS_KEY` is needed iff using ElevenLabs for TTS
 
 ## appsettings.json
 This is where configuration is done. Everything in here should lie within a `"Settings"` block. Within this block,
@@ -36,26 +44,31 @@ about some `MemoryHandler`. Each entry should look like so:
 ```json
 {
     "Handler": "RAG",
+    "ID":      "RAG",
     "Args": {
         "SelectLimit":    10,
         "WriteInterval": 10
     }
 }
 ```
-Where there is a `"Handler"` field giving the name of the handler, and an `"Args"` block denoting all of its needed arguments.
+Where there is a `"Handler"` field giving the name of the handler, an `"ID"` field giving a unique identifier for this handler instance,
+and an `"Args"` block denoting all of its needed arguments. The `"ID"` field allows multiple instances of the same handler type to be used simultaneously.
 
 There are currently three `MemoryHandler`s which can be used, listed below:
 - `SlidingWindow`
-    - Keeps track of last few messages sent to bot
-    - Args should consist of a `"MaxMessages"` field, whose value is an integer denoting how many messages it keeps track of
+    - Keeps track of the last few messages sent to the bot
+    - Args:
+        - `"MaxMessages"`: integer — how many messages to keep in the window
+        - `"ForThoughts"`: integer (0 or 1) — if 1, this window tracks internal thoughts rather than regular messages
 - `Summary`
     - Summarizes the conversation every few messages
-    - Args should consist of an `"UpdateInterval"` field, whose value is an integer denoting after how many messages the summary is updated
+    - Args:
+        - `"UpdateInterval"`: integer — how many messages between summary updates
 - `RAG`
-    - Stores all messages in a vector database and retrieves similar messages to that received in a conversation
-    - Args should consist of two fields
-        1. `"SelectLimit"`: an integer denoting how many messages it should retrieve in comparison
-        2. `"WriteInterval"`: an integer denoting how often it should push new messages to the database
+    - Stores all messages in a vector database and retrieves similar messages to the one received
+    - Args:
+        - `"SelectLimit"`: integer — how many similar messages to retrieve
+        - `"WriteInterval"`: integer — how often to push new messages to the database
 
 ### `"DefaultDiscordChannel"`
 If using the Discord body, this is the channel ID which the bot will voice its thoughts in if it
@@ -64,7 +77,7 @@ is the only channel the bot will respond to messages in.
 
 ### `"ExclusiveToChannel"`
 Determines if the bot should only talk in `"DefaultDiscordChannel"` when using the Discord body. If false,
-will talk whereever it receives a message.
+will talk wherever it receives a message.
 
 ### `"TimezoneSettings"`
 This block has two fields:
@@ -74,7 +87,7 @@ This block has two fields:
 ### `"Logging"`
 This is a block specifying how logging should be handled. It has three fields:
 1. `"ConsoleLevel"`: the minimum level a logged message should have to be outputted to the console.
-2. `"FileLevel"`: the minimum level a logged message should have to be outtputed to the log file.
+2. `"FileLevel"`: the minimum level a logged message should have to be outputted to the log file.
 3. `"FileLogPath"`: the path to the file to log to.
 
 The possible values for a logging level are as follows:
@@ -90,6 +103,49 @@ The possible values for a logging level are as follows:
 The interval, in seconds, between when the bot receives a message and when it should next think.
 Should be an integer.
 
+### `"Body"`
+The interface the bot should run with. Possible values:
+- `"Discord"`: runs as a Discord bot
+- `"Terminal"`: runs in the terminal (default if omitted)
+
+This can also be overridden at runtime via the `discord` or `terminal` command-line arguments.
+
+### `"Speech"`
+Configuration for text-to-speech (TTS). Only needed if the bot will be speaking in voice channels.
+
+```json
+"Speech": {
+    "Mouth":      "ElevenLabs",
+    "Voice":      "<voice-id>",
+    "Stability":  0.84,
+    "Similarity": 0.74,
+    "Tempo":      25,
+    "Pitch":      -2.5,
+    "Rate":       0,
+    "Tune":       true
+}
+```
+
+- `"Mouth"`: TTS provider to use. Possible values: `"ElevenLabs"`, `"Azure"`
+- `"Voice"`: Either ElevenLabs voice ID or Azure speech synthesis voice name
+- `"Stability"`: ElevenLabs voice stability (0.0–1.0). Only used when `"Mouth"` is `"ElevenLabs"`
+- `"Similarity"`: ElevenLabs similarity boost (0.0–1.0). Only used when `"Mouth"` is `"ElevenLabs"`
+- `"Tempo"`: Tempo adjustment
+- `"Pitch"`: Pitch adjustment
+- `"Rate"`: Speaking rate
+- `"Tune"`: boolean — whether to apply pitch/tempo tuning
+
+### `"Hearing"`
+Configuration for speech-to-text (STT). Only needed if the bot will be listening in voice channels.
+
+```json
+"Hearing": {
+    "Ear": "Azure"
+}
+```
+
+- `"Ear"`: STT provider to use. Currently only `"Azure"` is supported.
+
 ### Example
 Here's what an example `appsettings.json` could look like:
 ```json
@@ -98,14 +154,25 @@ Here's what an example `appsettings.json` could look like:
         "MemoryHandlers": [
             {
                 "Handler": "Summary",
+                "ID":      "Summary",
                 "Args": {
                     "UpdateInterval": 10
                 }
             },
             {
                 "Handler": "SlidingWindow",
+                "ID":      "MessageWindow",
                 "Args": {
-                    "MaxMessages": 10
+                    "MaxMessages": 10,
+                    "ForThoughts": 0
+                }
+            },
+            {
+                "Handler": "SlidingWindow",
+                "ID":      "ThoughtWindow",
+                "Args": {
+                    "MaxMessages": 2,
+                    "ForThoughts": 1
                 }
             }
         ],
@@ -116,10 +183,24 @@ Here's what an example `appsettings.json` could look like:
             "MinuteShift": 0
         },
         "RespondToThought": 5,
+        "Body": "Discord",
         "Logging": {
             "ConsoleLevel": "Warning",
             "FileLevel":    "Debug",
             "FileLogPath":  "wizard.log"
+        },
+        "Speech": {
+            "Mouth":      "ElevenLabs",
+            "Voice":      "<voice-id>",
+            "Stability":  0.84,
+            "Similarity": 0.74,
+            "Tempo":      25,
+            "Pitch":      -2.5,
+            "Rate":       0,
+            "Tune":       true
+        },
+        "Hearing": {
+            "Ear": "Azure"
         }
     }
 }
