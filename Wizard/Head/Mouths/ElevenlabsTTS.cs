@@ -13,10 +13,44 @@ namespace Wizard.Head.Mouths
         readonly ElevenLabsClient client;
         Voice?   voice;
 
-        const string voiceID = "MEJe6hPrI48Kt2lFuVe3";
+        readonly string voiceID;
+
+        readonly float stability;
+        readonly float similarity;
+        readonly float tempo;
+        readonly float pitch;
+        readonly float rate;
+        readonly bool  tune;
 
         public ElevenlabsTTS()
         {
+            if(Settings.instance is null || Settings.instance.Speech is null)
+            {
+                // default speech settings
+                voiceID = "MEJe6hPrI48Kt2lFuVe3";
+
+                stability  = 0.84f;
+                similarity = 0.74f;
+                tempo      = 25f;
+
+                pitch = rate = 0;
+
+                tune = true;
+            }
+            else
+            {
+                SpeechSettings settings = Settings.instance.Speech;
+
+                voiceID = settings.Voice;
+
+                stability  = settings.Stability;
+                similarity = settings.Similarity;
+                tempo      = settings.Tempo;
+                pitch      = settings.Pitch;
+                rate       = settings.Rate;
+                tune       = settings.Tune;
+            }
+
             client = new ElevenLabsClient(DotNetEnv.Env.GetString("ELEVENLABS_KEY"));
         }
 
@@ -26,11 +60,11 @@ namespace Wizard.Head.Mouths
 
             TextToSpeechRequest request = new(
                 voice: voice,
-                text: text,
+                text:  text,
                 model: Model.FlashV2_5,
                 voiceSettings: new VoiceSettings(
-                    stability: 0.84f,
-                    similarityBoost: 0.74f
+                    stability:       stability,
+                    similarityBoost: similarity
                 ),
                 outputFormat: OutputFormat.PCM_22050
             );
@@ -44,17 +78,25 @@ namespace Wizard.Head.Mouths
                 new WaveFormat(22050, 16, 1)
             );
 
-            WdlResamplingSampleProvider resampled = new (
-                reader.ToSampleProvider(),
-                48000
+            ISampleProvider samples = reader.ToSampleProvider();
+
+            ISampleProvider processed = new SoundTouchSampleProvider(
+                samples,
+                tempo:          tempo,
+                pitchSemiTones: pitch,
+                rate:           rate,
+                tuneForSpeech:  tune
             );
+
+            ISampleProvider resampled = new WdlResamplingSampleProvider(processed, 48000);
 
             MonoToStereoSampleProvider stereo = new(resampled);
 
             var waveProvider = stereo.ToWaveProvider16();
 
             using var output = new MemoryStream();
-            byte[] buffer = new byte[3840];
+            byte[]    buffer = new byte[3840];
+            
             int bytesRead;
             while ((bytesRead = waveProvider.Read(buffer, 0, buffer.Length)) > 0)
             {
