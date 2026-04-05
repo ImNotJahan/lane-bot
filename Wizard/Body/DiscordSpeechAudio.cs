@@ -15,6 +15,36 @@ namespace Wizard.Body
         /// </summary>
         public static IOpusDecoder CreateDecoder(int channels) => OpusCodecFactory.CreateDecoder(48000, channels);
 
+        // 31-tap Hamming-windowed sinc low-pass filter, cutoff at 8 kHz (Nyquist for 16k output).
+        // Applied before 3:1 decimation to prevent aliasing.
+        private static readonly float[] s_lowPassCoeffs = ComputeLowPassFir(31, 8000.0 / 48000.0);
+
+        private static float[] ComputeLowPassFir(int taps, double normalizedCutoff)
+        {
+            int     m   = taps - 1;
+            float[] h   = new float[taps];
+            double  sum = 0;
+
+            for (int i = 0; i < taps; i++)
+            {
+                double x    = i - m / 2.0;
+                double sinc = x == 0 
+                            ? 2 * normalizedCutoff 
+                            : Math.Sin(2 * Math.PI * normalizedCutoff * x) 
+                            / (Math.PI * x);
+                
+                double hamming = 0.54 - 0.46 * Math.Cos(2 * Math.PI * i / m);
+
+                h[i] = (float)(sinc * hamming);
+
+                sum += h[i];
+            }
+
+            for (int i = 0; i < taps; i++) h[i] /= (float)sum;
+
+            return h;
+        }
+
         /// <summary>
         /// Decodes one Opus packet into 16-bit PCM samples at 48 kHz.
         /// Returns interleaved PCM bytes (little-endian).
@@ -86,18 +116,26 @@ namespace Wizard.Body
                 }
             }
 
-            // Resample 48k -> 16k by 3:1 decimation
+            // Resample 48k -> 16k: low-pass filter then 3:1 decimation
             int outputFrames = inputFrames / 3;
-            if (outputFrames == 0)
-                return [];
+
+            if (outputFrames == 0) return [];
 
             byte[] output = new byte[outputFrames * 2];
+            int halfTaps = s_lowPassCoeffs.Length / 2;
 
             for (int i = 0; i < outputFrames; i++)
             {
-                float sample = Math.Clamp(mono48k[i * 3], -1f, 1f);
-                short pcm16 = (short)Math.Round(sample * 32767f);
+                int center = i * 3;
+                float acc = 0f;
+                for (int t = 0; t < s_lowPassCoeffs.Length; t++)
+                {
+                    int idx = center - halfTaps + t;
+                    
+                    if ((uint) idx < (uint) inputFrames) acc += mono48k[idx] * s_lowPassCoeffs[t];
+                }
 
+                short pcm16 = (short)Math.Round(Math.Clamp(acc, -1f, 1f) * 32767f);
                 output[i * 2]     = (byte)(pcm16 & 0xFF);
                 output[i * 2 + 1] = (byte)((pcm16 >> 8) & 0xFF);
             }
