@@ -296,7 +296,7 @@ namespace Wizard.Body
 
         private ValueTask OnMessageCreate(Message message)
         {
-            if (message.Author.IsBot) return default;
+            if (message.Author.Id  == client.Id)                           return default;
             if (exclusiveToChannel && message.ChannelId != defaultChannel) return default;
 
             recentChannelId = message.ChannelId;
