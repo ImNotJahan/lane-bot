@@ -36,7 +36,10 @@ namespace Wizard.Utility
                 builder.AddFile(options =>
                 {
                     options.RootPath = AppContext.BaseDirectory;
-                    options.Files    = [new LogFileOptions { Path = settings.FileLogPath }];
+                    options.Files    = [new LogFileOptions { 
+                        Path       = settings.FileLogPath,
+                        DateFormat = "yyyyMMdd"
+                    }];
                 }).AddFilter<FileLoggerProvider>(null, StringToLogLevel(settings.FileLevel));
             });
 
