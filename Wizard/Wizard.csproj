@@ -16,6 +16,7 @@
     <PackageReference Include="Json.Net" Version="1.0.33" />
     <PackageReference Include="Karambolo.Extensions.Logging.File" Version="4.1.0" />
     <PackageReference Include="Microsoft.CognitiveServices.Speech" Version="1.48.2" />
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.4.1" />
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.5" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.5" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.5" />

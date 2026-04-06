@@ -13,6 +13,7 @@ namespace Wizard.Utility
         public required string            Body                  { get; set; }
         public          SpeechSettings?   Speech                { get; set; }
         public          HearingSettings?  Hearing               { get; set; }
+        public required string            LLM                   { get; set; }
     }
 
     public sealed class HandlerSettings

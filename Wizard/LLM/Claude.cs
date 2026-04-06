@@ -21,7 +21,11 @@ namespace Wizard.LLM
             };
         }
 
-        private static MessageCreateParams CreateParams(List<MessageContainer> context, string prompt, string cachedDynamicPrompt, string dynamicPrompt)
+        private static MessageCreateParams CreateParams(
+            List<MessageContainer> context, 
+            string                 prompt, 
+            string                 cachedDynamicPrompt, 
+            string                 dynamicPrompt)
         {
             List<MessageParam>    messages      = [];
             List<TextBlockParam>  systemBlocks  = [

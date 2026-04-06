@@ -53,7 +53,14 @@ namespace Wizard
                 };
             }
 
-            ILLM llm = new Claude();
+            ILLM llm;
+            if(settings is null) llm = new Claude();
+            else llm = settings.LLM switch
+            {
+                "Claude"   => new Claude(),
+                "DeepSeek" => new DeepSeek(),
+                _          => throw new Exception($"Invalid LLM {settings.LLM}")
+            };
 
             Dictionary<string, IMemoryHandler> memoryHandlers = [];
 

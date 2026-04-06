@@ -1,5 +1,6 @@
 using Anthropic.Models.Messages;
 using Newtonsoft.Json.Linq;
+using OpenAI.Chat;
 using Wizard.Utility;
 
 namespace Wizard.LLM
@@ -89,6 +90,18 @@ namespace Wizard.LLM
             }
 
             throw new Exception("Unknown MessageType " + type);
+        }
+
+        public ChatMessage OpenAI()
+        {
+            string text = type == MessageType.Thought ? $"<thought>{content}</thought>" : ToString();
+
+            return author switch
+            {
+                Author.User => new UserChatMessage(text),
+                Author.Bot  => new AssistantChatMessage(text),
+                _           => throw new Exception($"Unexpected author type {author}")
+            };
         }
 
         public string      GetContent()     => content;
