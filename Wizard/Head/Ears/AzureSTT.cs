@@ -1,7 +1,6 @@
 using Microsoft.CognitiveServices.Speech;
 using Microsoft.CognitiveServices.Speech.Audio;
 using Wizard.Body;
-using Wizard.Utility;
 
 namespace Wizard.Head.Ears
 {
@@ -22,11 +21,6 @@ namespace Wizard.Head.Ears
                 "300"
             );
 
-            speechConfig.SetProperty(
-                PropertyId.SpeechServiceConnection_InitialSilenceTimeoutMs,
-                "1000"
-            );
-
             AudioConfig audioConfig = AudioConfig.FromStreamInput(stream.PushStream);
 
             recognizer = new(speechConfig, audioConfig);
@@ -35,7 +29,6 @@ namespace Wizard.Head.Ears
         public async Task<string> Listen()
         {
             SpeechRecognitionResult result = await recognizer.RecognizeOnceAsync();
-
             return result.Text;
         }
     }

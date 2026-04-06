@@ -10,6 +10,8 @@ namespace Wizard.Head
         public delegate void     OnEvent(string text);
         public event    OnEvent? OnHadGoodThought;
 
+        public event Action<int>? TimeUntilThoughtChanged;
+
         readonly ILLM llm = llm;
 
         readonly Dictionary<string, IMemoryHandler> memoryHandlers = memoryHandlers;
@@ -250,12 +252,14 @@ namespace Wizard.Head
 
                 timeUntilThought = (int?) data["next_thought_in_seconds"]
                                 ?? throw new InvalidMonologue("Did not have next_thought_in_seconds property");
+                
+                TimeUntilThoughtChanged?.Invoke(timeUntilThought);
 
                 string thought = (string?) data["thought"]
                               ?? throw new InvalidMonologue("Did not have thought property");
 
                 Logger.LogInformation("[Thought] " + thought);
-                Logger.LogInformation($"Will think again in {timeUntilThought} seconds");
+                Logger.LogDebug($"Will think again in {timeUntilThought} seconds");
 
                 lastThought = new(thought, Author.Bot, MessageType.Thought);
 
@@ -284,6 +288,8 @@ namespace Wizard.Head
                         
                         timeUntilThought = timeBetweenMessageAndThought; 
                     }
+                    
+                    TimeUntilThoughtChanged?.Invoke(timeUntilThought);
                 }
             }
         }

@@ -79,9 +79,19 @@ namespace Wizard.Body
             return default;
         }
 
+        private void CleanupAllUsers()
+        {
+            foreach (ulong ssrc in _listenerCts.Keys)
+                CleanupUser(ssrc);
+
+            _userIdToSsrc.Clear();
+        }
+
         private async Task ConnectVoiceAsync(Guild guild)
         {
             if (voiceClient is not null) return;
+
+            CleanupAllUsers();
 
             this.guild = guild;
 
@@ -187,9 +197,8 @@ namespace Wizard.Body
             float peak = 0f;
             foreach (float s in pcm48k) { float a = Math.Abs(s); if (a > peak) peak = a; }
 
-            bool hasListener = _listenerCts.ContainsKey(args.Ssrc);
-
-            _userStreams.GetOrAdd(args.Ssrc, _ => new DiscordAudioStream()).Write(pcm16kMono);
+            if (_userStreams.TryGetValue(args.Ssrc, out DiscordAudioStream? stream))
+                stream.Write(pcm16kMono);
 
             return default;
         }
@@ -228,6 +237,7 @@ namespace Wizard.Body
 
         private async Task UserListenLoop(ulong ssrc, CancellationToken ct)
         {
+            Logger.LogDebug("UserListenLoop: starting for SSRC {Ssrc}", ssrc);
             DiscordAudioStream userStream = _userStreams.GetOrAdd(ssrc, _ => new DiscordAudioStream());
             IEar ear                      = CreateEar(userStream);
 
@@ -242,7 +252,7 @@ namespace Wizard.Body
 
                     string username = _ssrcToUser.TryGetValue(ssrc, out string? u) ? u : "User";
 
-                    Logger.LogInformation("[{User}] Heard: {Spoken}", username, spoken);
+                    Logger.LogDebug("[{User}] Heard: {Spoken}", username, spoken);
 
                     _ = RespondToMessage(username, "[Voice chat] " + spoken, [], true);
                 }
@@ -348,11 +358,16 @@ namespace Wizard.Body
         private async Task SayMessage(string message)
         {
             if (voiceClient is not null) await SpeakAsync(message, voiceClient);
+            else Logger.LogError("VoiceClient is null");
         }
 
         private async Task SpeakAsync(string text, VoiceClient vc)
         {
-            if (mouth is null) return;
+            if (mouth is null)
+            {
+                Logger.LogWarning("Tried to speak but mouth was null");
+                return;
+            }
 
             try
             {
@@ -409,64 +424,22 @@ namespace Wizard.Body
 
     public class DiscordAudioStream
     {
-        // Bounded at 50 frames (~1 s). DropOldest evicts stale audio if the
-        // recognizer falls behind, keeping the queue current.
-        private readonly System.Threading.Channels.Channel<byte[]> _queue = System.Threading.Channels.Channel.CreateBounded<byte[]>(
-            new System.Threading.Channels.BoundedChannelOptions(50) { FullMode = System.Threading.Channels.BoundedChannelFullMode.DropOldest }
-        );
-
-        private readonly PushAudioInputStream    _pushStream;
-        private readonly CancellationTokenSource _cts = new();
-
-        // 20 ms of silence at 16 kHz, 16-bit mono
-        private static readonly byte[] Silence = new byte[640];
-
-        // 25 x 20 ms = 500 ms - enough to exceed the 300 ms segmentation timeout
-        // without flooding the push stream between utterances.
-        private const int SilenceFrameLimit = 25;
+        private readonly PushAudioInputStream _pushStream;
 
         public DiscordAudioStream()
         {
             _pushStream = AudioInputStream.CreatePushStream(
                 AudioStreamFormat.GetWaveFormatPCM(16000, 16, 1));
-
-            _ = Task.Run(() => PumpAsync(_cts.Token));
         }
 
         internal PushAudioInputStream PushStream => _pushStream;
 
-        public void Write(byte[] bytes) => _queue.Writer.TryWrite(bytes);
-
-        public void Close()
+        public void Write(byte[] bytes)
         {
-            _cts.Cancel();
-            _queue.Writer.TryComplete();
-            _pushStream.Close();
+            try   { _pushStream.Write(bytes); }
+            catch (Exception ex) { Logger.LogError("DiscordAudioStream write failed: {Error}", ex.Message); }
         }
 
-        private async Task PumpAsync(CancellationToken ct)
-        {
-            int silenceFramesSent = 0;
-
-            while (!ct.IsCancellationRequested)
-            {
-                if (_queue.Reader.TryRead(out byte[]? chunk))
-                {
-                    silenceFramesSent = 0;
-                    try   { _pushStream.Write(chunk); }
-                    catch (Exception ex) { Logger.LogError("DiscordAudioStream pump failed: {Error}", ex.Message); break; }
-                }
-                else if (silenceFramesSent < SilenceFrameLimit)
-                {
-                    try   { _pushStream.Write(Silence); }
-                    catch (Exception ex) { Logger.LogError("DiscordAudioStream silence pump failed: {Error}", ex.Message); break; }
-                    silenceFramesSent++;
-                }
-
-                // Pace all writes to real-time so the push stream is never flooded.
-                try   { await Task.Delay(20, ct); }
-                catch (OperationCanceledException) { break; }
-            }
-        }
+        public void Close() => _pushStream.Close();
     }
 }

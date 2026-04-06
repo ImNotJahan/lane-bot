@@ -1,12 +1,14 @@
 using Karambolo.Extensions.Logging.File;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Console;
+using Wizard.Utility.BufferLogger;
 
 namespace Wizard.Utility
 {
     public static class Logger
     {
-        static readonly ILogger logger;
+        static readonly ILogger   logger;
+        static readonly BufferLog log;
 
         static Logger()
         {
@@ -26,12 +28,14 @@ namespace Wizard.Utility
                 settings = Settings.instance.Logging;
             }
 
+            log = new(200);
+
             ILoggerFactory factory = LoggerFactory.Create(builder => 
             {
                 builder.SetMinimumLevel(LogLevel.Debug);
                 
-                builder.AddConsole()
-                       .AddFilter<ConsoleLoggerProvider>(null, StringToLogLevel(settings.ConsoleLevel));
+                /*builder.AddConsole()
+                       .AddFilter<ConsoleLoggerProvider>(null, StringToLogLevel(settings.ConsoleLevel));*/
                 
                 builder.AddFile(options =>
                 {
@@ -41,6 +45,8 @@ namespace Wizard.Utility
                         DateFormat = "yyyyMMdd"
                     }];
                 }).AddFilter<FileLoggerProvider>(null, StringToLogLevel(settings.FileLevel));
+
+                builder.AddProvider(new BufferLoggerProvider(log, StringToLogLevel(settings.ConsoleLevel)));
             });
 
             logger = factory.CreateLogger("Program");
@@ -65,5 +71,7 @@ namespace Wizard.Utility
         public static void LogWarning    (string? message, params object[] args) => logger.LogWarning(message, args);
         public static void LogError      (string? message, params object[] args) => logger.LogError(message, args);
         public static void LogDebug      (string? message, params object[] args) => logger.LogDebug(message, args);
+
+        public static BufferLog Buffer() => log;
     }
 }

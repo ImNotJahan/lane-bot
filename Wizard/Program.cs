@@ -1,10 +1,11 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json.Linq;
-using Wizard.Body;
+using Terminal.Gui.App;
+using Terminal.Gui.Views;
 using Wizard.Head;
-using Wizard.Head.Mouths;
 using Wizard.LLM;
 using Wizard.Memory;
+using Wizard.UI;
 using Wizard.Utility;
 
 namespace Wizard
@@ -22,6 +23,10 @@ namespace Wizard
             Settings.instance = settings;
 
             DotNetEnv.Env.TraversePath().Load();
+
+            using IApplication app = Application.Create();
+            
+            app.Init();
             
             Body selectedBody;
 
@@ -115,17 +120,18 @@ namespace Wizard
                 ulong                defaultChannel = settings?.DefaultDiscordChannel ?? 0;
                 Wizard.Body.Discord  discord        = new(bot, defaultChannel);
 
-                await discord.ConnectAsync();
+                _ = discord.ConnectAsync();
 
                 Console.WriteLine("Connected");
-
-                await Task.Delay(-1);
             } else if(selectedBody == Body.Terminal)
             {
-                Terminal terminal = new(bot);
+                throw new Exception("Terminal needs to be worked on");
+                Wizard.Body.Terminal terminal = new(bot);
 
                 await terminal.BeginLoop();
             }
+
+            app.Run(new DashboardView(bot, llm));
         }
 
         enum Body

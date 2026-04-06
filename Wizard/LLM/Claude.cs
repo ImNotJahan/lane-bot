@@ -11,6 +11,8 @@ namespace Wizard.LLM
         
         readonly AnthropicClient client;
 
+        public event ILLM.TokenUsageHandler? TokenUsage;
+
         public Claude()
         {
             client = new()
@@ -79,12 +81,18 @@ namespace Wizard.LLM
                 }
             }
 
-            Logger.LogInformation(
+            Logger.LogDebug(
                 "Token usage — input: {0}, output: {1}, cache write: {2}, cache read: {3}",
                 response.Usage.InputTokens,
                 response.Usage.OutputTokens,
                 response.Usage.CacheCreationInputTokens ?? 0,
                 response.Usage.CacheReadInputTokens     ?? 0
+            );
+
+            TokenUsage?.Invoke(
+                (int) response.Usage.InputTokens,
+                (int) response.Usage.OutputTokens,
+                (int) (response.Usage.CacheReadInputTokens ?? 0)
             );
 
             return new(formattedResponse, Author.Bot);
