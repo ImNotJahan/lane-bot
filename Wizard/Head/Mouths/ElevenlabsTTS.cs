@@ -71,7 +71,7 @@ namespace Wizard.Head.Mouths
 
             VoiceClip clip = await client.TextToSpeechEndpoint.TextToSpeechAsync(request);
 
-            Logger.LogInformation("Voice clip length: " + clip.ClipData.Length);
+            Logger.LogDebug("Voice clip length: " + clip.ClipData.Length);
 
             RawSourceWaveStream reader = new(
                 new MemoryStream(clip.ClipData.ToArray()),
@@ -110,9 +110,9 @@ namespace Wizard.Head.Mouths
 
             byte[] discordReady = output.ToArray();
 
-            Logger.LogInformation($"discordReady length: {discordReady.Length}, remainder: {discordReady.Length % 3840}");
+            Logger.LogDebug($"discordReady length: {discordReady.Length}, remainder: {discordReady.Length % 3840}");
 
-            Logger.LogInformation("Resampled PCM bytes: " + discordReady.Length);
+            Logger.LogDebug("Resampled PCM bytes: " + discordReady.Length);
             
             return discordReady;
         }
