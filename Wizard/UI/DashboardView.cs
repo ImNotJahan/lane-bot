@@ -16,12 +16,19 @@ namespace Wizard.UI
             Width  = Dim.Fill();
             Height = Dim.Fill();
 
-            NextThoughtView nextThoughtView = new(bot)
+            ConfigView configView = new()
             {
                 X = Y = 0,
 
                 Width  = Dim.Percent(20),
-                Height = Dim.Percent(40)
+                Height = Dim.Auto()
+            };
+            NextThoughtView nextThoughtView = new(bot)
+            {
+                X      = 0,
+                Y      = Pos.Bottom(configView),
+                Width  = Dim.Percent(20),
+                Height = Dim.Percent(40) - Dim.Height(configView)
             };
             LogTailView logTailView = new(200)
             {
@@ -39,6 +46,7 @@ namespace Wizard.UI
                 Height = Dim.Percent(40)
             };
 
+            Add(configView);
             Add(nextThoughtView);
             Add(logTailView);
             Add(tokenView);
