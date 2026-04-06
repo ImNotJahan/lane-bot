@@ -40,7 +40,7 @@ namespace Wizard.Head.Mouths
             synthesizer = new(config);
         }
 
-        public async Task<byte[]> Speak(string text)
+        public async IAsyncEnumerable<byte[]> Speak(string text)
         {
             string ssml = @$"
             <speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis'
@@ -56,7 +56,7 @@ namespace Wizard.Head.Mouths
 
             SpeechSynthesisResult result = await synthesizer.SpeakSsmlAsync(ssml);
 
-            return result.AudioData;
+            yield return result.AudioData;
         }
     }
 }

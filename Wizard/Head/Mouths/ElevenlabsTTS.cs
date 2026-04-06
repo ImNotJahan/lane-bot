@@ -15,11 +15,7 @@ namespace Wizard.Head.Mouths
 
         readonly string voiceID;
 
-        readonly float stability;
-        readonly float similarity;
-        readonly float tempo;
-        readonly float pitch;
-        readonly float rate;
+        readonly float stability, similarity, tempo, pitch, rate;
         readonly bool  tune;
 
         public ElevenlabsTTS()
@@ -54,7 +50,7 @@ namespace Wizard.Head.Mouths
             client = new ElevenLabsClient(DotNetEnv.Env.GetString("ELEVENLABS_KEY"));
         }
 
-        public async Task<byte[]> Speak(string text)
+        public async IAsyncEnumerable<byte[]> Speak(string text)
         {
             voice ??= await client.VoicesEndpoint.GetVoiceAsync(voiceID);
 
@@ -71,50 +67,42 @@ namespace Wizard.Head.Mouths
 
             VoiceClip clip = await client.TextToSpeechEndpoint.TextToSpeechAsync(request);
 
-            Logger.LogDebug("Voice clip length: " + clip.ClipData.Length);
+            // we process and return the audio data as we receive it
+            foreach (byte[] frame in ProcessClip(clip.ClipData.ToArray())) yield return frame;
+        }
 
+        private IEnumerable<byte[]> ProcessClip(byte[] rawPcm)
+        {
             RawSourceWaveStream reader = new(
-                new MemoryStream(clip.ClipData.ToArray()),
+                new MemoryStream(rawPcm),
                 new WaveFormat(22050, 16, 1)
             );
 
-            ISampleProvider samples = reader.ToSampleProvider();
-
             ISampleProvider processed = new SoundTouchSampleProvider(
-                samples,
+                reader.ToSampleProvider(),
                 tempo:          tempo,
                 pitchSemiTones: pitch,
                 rate:           rate,
                 tuneForSpeech:  tune
             );
 
-            ISampleProvider resampled = new WdlResamplingSampleProvider(processed, 48000);
+            IWaveProvider waveProvider = new MonoToStereoSampleProvider(
+                new WdlResamplingSampleProvider(processed, 48000)
+            ).ToWaveProvider16();
 
-            MonoToStereoSampleProvider stereo = new(resampled);
+            byte[] buffer = new byte[3840];
+            int    bytesRead;
 
-            var waveProvider = stereo.ToWaveProvider16();
-
-            using var output = new MemoryStream();
-            byte[]    buffer = new byte[3840];
-            
-            int bytesRead;
             while ((bytesRead = waveProvider.Read(buffer, 0, buffer.Length)) > 0)
             {
-                if (bytesRead < buffer.Length)
-                {
-                    // Pad the final frame with silence
-                    Array.Clear(buffer, bytesRead, buffer.Length - bytesRead);
-                }
-                output.Write(buffer, 0, buffer.Length);
+                if (bytesRead < buffer.Length) Array.Clear(buffer, bytesRead, buffer.Length - bytesRead);
+
+                byte[] frame = new byte[buffer.Length];
+                
+                Buffer.BlockCopy(buffer, 0, frame, 0, buffer.Length);
+
+                yield return frame;
             }
-
-            byte[] discordReady = output.ToArray();
-
-            Logger.LogDebug($"discordReady length: {discordReady.Length}, remainder: {discordReady.Length % 3840}");
-
-            Logger.LogDebug("Resampled PCM bytes: " + discordReady.Length);
-            
-            return discordReady;
         }
     }
 }

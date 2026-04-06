@@ -371,8 +371,6 @@ namespace Wizard.Body
 
             try
             {
-                byte[] pcm = await mouth.Speak(text);
-
                 await vc.EnterSpeakingStateAsync(new SpeakingProperties(SpeakingFlags.Microphone));
 
                 Stream voiceStream = vc.CreateVoiceStream();
@@ -382,7 +380,12 @@ namespace Wizard.Body
                     VoiceChannels.Stereo,
                     OpusApplication.Voip
                 );
-                await opusStream.WriteAsync(pcm);
+
+                // we output speech as we receive it
+                await foreach (byte[] chunk in mouth.Speak(text)) 
+                {
+                    await opusStream.WriteAsync(chunk);
+                }
             }
             catch (Exception ex)
             {

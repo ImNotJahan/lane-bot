@@ -2,6 +2,6 @@ namespace Wizard.Head.Mouths
 {
     public interface IMouth
     {
-        public Task<byte[]> Speak(string text);
+        public IAsyncEnumerable<byte[]> Speak(string text);
     }
 }
