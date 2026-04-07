@@ -9,7 +9,8 @@ namespace Wizard.LLM
             List<MessageContainer> context, 
             string                 systemPrompt, 
             string                 cachedDynamicPrompt = "",
-            string                 dynamicPrompt       = ""
+            string                 dynamicPrompt       = "",
+            List<string>?          stopSequences       = null
         );
     }
 }

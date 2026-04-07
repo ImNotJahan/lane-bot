@@ -223,9 +223,11 @@ namespace Wizard.Head
                 Logger.LogDebug("Monologuing with dynamic prompt: " + dynamicPrompt);
 
                 MessageContainer response = await llm.Prompt(
-                    [new(dynamicPrompt, Author.Bot)],
+                    [new("```json", Author.Bot)],
                     Prompts.GetPrompt("Monologue"),
-                    cachedDynamicPrompt
+                    cachedDynamicPrompt,
+                    dynamicPrompt,
+                    ["```"]
                 );
 
                 if(response.GetContent() == "") throw new Exception("Response was empty");
@@ -234,16 +236,7 @@ namespace Wizard.Head
 
                 try
                 {
-                    string toParse = response.GetContent();
-
-                    // sometimes the LLM will include extra stuff in the response,
-                    // so we will look for and extract just the JSON
-                    int start = toParse.IndexOf('{');
-                    int end   = toParse.LastIndexOf('}');
-
-                    if(start == -1 || end == -1 || end < start) throw new InvalidMonologue("No JSON object found in response");
-
-                    data = JObject.Parse(toParse[start..(end + 1)]);
+                    data = JObject.Parse(response.GetContent());
                 } catch(Exception exception)
                 {
                     Logger.LogError("Invalid monologue: " + response.GetContent());

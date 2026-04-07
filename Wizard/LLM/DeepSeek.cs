@@ -28,7 +28,8 @@ namespace Wizard.LLM
             List<MessageContainer> context,
             string                 systemPrompt,
             string                 cachedDynamicPrompt = "",
-            string                 dynamicPrompt       = ""
+            string                 dynamicPrompt       = "",
+            List<string>?          stopSequences       = null
         )
         {
             string system = systemPrompt;
@@ -41,10 +42,15 @@ namespace Wizard.LLM
 
             foreach (MessageContainer message in context) messages.Add(message.OpenAI());
 
-            ChatCompletion response = await client.CompleteChatAsync(
-                messages,
-                new ChatCompletionOptions { MaxOutputTokenCount = MaxTokens }
-            );
+            ChatCompletionOptions options = new()
+            {
+                MaxOutputTokenCount = MaxTokens,
+                Temperature         = 1,
+            };
+
+            if (stopSequences is not null) foreach (string s in stopSequences) options.StopSequences.Add(s);
+
+            ChatCompletion response = await client.CompleteChatAsync(messages, options);
 
             string formattedResponse = response.Content[0].Text;
 

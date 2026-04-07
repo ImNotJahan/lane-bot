@@ -25,7 +25,9 @@ namespace Wizard.LLM
             List<MessageContainer> context, 
             string                 prompt, 
             string                 cachedDynamicPrompt, 
-            string                 dynamicPrompt)
+            string                 dynamicPrompt,
+            List<string>           stopSequences
+        )
         {
             List<MessageParam>    messages      = [];
             List<TextBlockParam>  systemBlocks  = [
@@ -54,11 +56,12 @@ namespace Wizard.LLM
 
             return new()
             {
-                MaxTokens   = MaxTokens,
-                Model       = Model,
-                Temperature = 1,
-                System      = systemBlocks,
-                Messages    = messages
+                MaxTokens     = MaxTokens,
+                Model         = Model,
+                Temperature   = 1,
+                System        = systemBlocks,
+                Messages      = messages,
+                StopSequences = stopSequences
             };
         }
 
@@ -66,13 +69,14 @@ namespace Wizard.LLM
             List<MessageContainer> context,
             string                 systemPrompt,
             string                 cachedDynamicPrompt = "",
-            string                 dynamicPrompt       = ""
+            string                 dynamicPrompt       = "",
+            List<string>?          stopSequences       = null
         )
         {
             Logger.LogDebug("Prompting Claude with cached dynamic prompt:" + cachedDynamicPrompt);
 
             Message response = await client.Messages.Create(CreateParams(
-                context, systemPrompt, cachedDynamicPrompt, dynamicPrompt
+                context, systemPrompt, cachedDynamicPrompt, dynamicPrompt, stopSequences ?? []
             ));
 
             string formattedResponse = "";
