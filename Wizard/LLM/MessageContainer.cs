@@ -135,7 +135,7 @@ namespace Wizard.LLM
 
         public static string TimeSince(DateTime time)
         {
-            return (DateTime.Now - time) switch
+            return (DateTime.UtcNow - time) switch
             {
                 { TotalHours: < 1 } ts => $"{ts.Minutes} minutes ago",
                 { TotalDays: < 1 }  ts => $"{ts.Hours} hours ago",

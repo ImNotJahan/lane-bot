@@ -61,9 +61,9 @@ namespace Wizard.Head
 
             Logger.LogInformation("Recieved message {0}", message);
 
-            foreach(string url in imageUrls) await RememberMessage(new(url, Author.User, MessageType.Image, DateTime.Now));
+            foreach(string url in imageUrls) await RememberMessage(new(url, Author.User, MessageType.Image, DateTime.UtcNow));
 
-            MessageContainer       formattedMessage = new($"{author} says: {message}", time: DateTime.Now);
+            MessageContainer       formattedMessage = new($"{author} says: {message}", time: DateTime.UtcNow);
             List<MessageContainer> recentMessages   = await AssembleContext(formattedMessage, true, false);
             float                  enthusiasm       = await Enthusiasm(recentMessages, formattedMessage);
 
