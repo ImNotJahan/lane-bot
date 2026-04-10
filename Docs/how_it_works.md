@@ -99,7 +99,9 @@ When Lane generates a response (or a monologue thought with `"speak": true`):
 - If the **last interaction was in VC**: the response is spoken via the configured `IMouth`
 - Otherwise: the response is sent as a text message to the most recently active text channel (or `DefaultDiscordChannel` if none)
 
-TTS output (PCM audio) is Opus-encoded and streamed to the Discord voice connection.
+TTS synthesis begins as soon as the LLM starts streaming output, so speaking starts before the full response is complete. TTS output (PCM audio) is Opus-encoded and streamed to the Discord voice connection.
+
+A low-pass filter is applied to the audio before Opus compression to reduce high-frequency noise that can be introduced by the encoding process.
 
 ### Image Support
 
@@ -119,3 +121,16 @@ The Terminal body is a simple read-eval loop. It:
 - Prints the response, or nothing if Lane chose not to respond
 
 The monologue currently does **not** run in Terminal mode. There is no voice, no image support, and no persistence between sessions unless memory was previously written by a Discord session.
+
+---
+
+## Dashboard (Discord)
+
+When running in Discord mode, a TUI dashboard is rendered in the terminal alongside the running bot. It has four panels:
+
+- **Log tail** — scrolling view of recent log output
+- **Token usage** — running count of input, output, and cached tokens consumed
+- **Next thought** — countdown to Lane's next monologue iteration
+- **Config** — a read-only view of the active `appsettings.json` settings
+
+The dashboard is rendered using [Terminal.Gui](https://github.com/gui-cs/Terminal.Gui) and does not appear in Terminal body mode.

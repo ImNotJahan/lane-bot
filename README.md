@@ -1,7 +1,7 @@
 # Lane
 
 ![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)
-![Claude Haiku](https://img.shields.io/badge/LLM-Claude%20Haiku%204.5-D97706)
+[![Docs](https://img.shields.io/badge/docs-blue)](https://lane-bot.readthedocs.io)
 
 Lane is a Discord/terminal chatbot designed to feel authentic and personality-driven, following in the spirit of the Twitch streamer [Neuro-sama](https://www.twitch.tv/vedal987). She selectively responds to messages, maintains memory across conversations, initiates her own conversations, and can speak and listen in voice channels.
 
@@ -28,7 +28,8 @@ Lane is a Discord/terminal chatbot designed to feel authentic and personality-dr
   ![Bot in VC](Resources/Images/VC.png)
 - **Time awareness** — keeps track of the current time
   ![Being used as timer](Resources/Images/Time.png)
-- **Detailed logging**
+- **Dashboard** — a terminal UI (TUI) dashboard showing live logs, token usage, next-thought countdown, and config when running in Discord mode
+- **Detailed logging** — log filenames support `<date>` for automatic date-stamping
 - **Extensive configuration** — see [Docs/configuration.md](Docs/configuration.md)
 
 ---
@@ -38,7 +39,7 @@ Lane is a Discord/terminal chatbot designed to feel authentic and personality-dr
 | Component | Technology |
 |---|---|
 | Language | C# (.NET 10) |
-| LLM | Anthropic Claude Haiku 4.5 |
+| LLM | Anthropic Claude Haiku 4.5 or DeepSeek (`deepseek-chat`) |
 | Vector embeddings | OpenAI `text-embedding-3-small` |
 | Vector database | Qdrant |
 | TTS | ElevenLabs or Azure |
@@ -50,7 +51,7 @@ Lane is a Discord/terminal chatbot designed to feel authentic and personality-dr
 
 ### 1. Prerequisites
 
-- **Required:** Anthropic API key
+- **Required:** Anthropic API key (or DeepSeek API key if using DeepSeek)
 - **For Discord:** Discord bot application + API key
 - **For RAG memory:** Qdrant API key + endpoint, and an OpenAI embeddings API key + endpoint
 
@@ -59,7 +60,8 @@ Lane is a Discord/terminal chatbot designed to feel authentic and personality-dr
 Create a `.env` file in the root of the `Wizard` folder:
 
 ```env
-ANTHROPIC_API_KEY=         # Required
+ANTHROPIC_API_KEY=         # Required if using Claude
+DEEPSEEK_API_KEY=          # Required if using DeepSeek
 DISCORD_API_KEY=           # Required for Discord
 QDRANT_API_KEY=            # Required for RAG memory
 QDRANT_ENDPOINT=           # Required for RAG memory
@@ -74,7 +76,7 @@ ELEVENLABS_KEY=            # Required for TTS via ElevenLabs
 
 Adjust `appsettings.json` to match your setup — see [Docs/configuration.md](Docs/configuration.md) for full details. If you don't have Qdrant set up, make sure RAG memory is disabled in your config.
 
-Then run the binary. Pass `discord` or `terminal` as a command-line argument to select the interface (defaults to `terminal`).
+Then run the binary. Pass `discord` or `terminal` as a command-line argument to select the interface (defaults to `terminal`). When running in Discord mode, a dashboard UI launches automatically in the terminal showing live logs, token usage, next-thought countdown, and current configuration.
 
 For a full walkthrough, see [Docs/getting_started.md](Docs/getting_started.md).
 

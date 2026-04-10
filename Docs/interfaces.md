@@ -35,9 +35,16 @@ public interface ILLM
 
 A `MessageContainer` containing the LLM's response text.
 
-### Current Implementation
+### Current Implementations
 
-`Claude` (`Wizard/LLM/Claude.cs`) — uses Anthropic Claude Haiku 4.5. The three prompt segments are assembled into a single system prompt, with `cachedDynamicPrompt` marked for prompt caching where the API supports it.
+| Class | Provider | Model | Config key |
+|---|---|---|---|
+| `Claude` | Anthropic | Claude Haiku 4.5 | `"LLM": "Claude"` |
+| `DeepSeek` | DeepSeek | `deepseek-chat` | `"LLM": "DeepSeek"` |
+
+`Claude` assembles the three prompt segments into a single system prompt, with `cachedDynamicPrompt` marked for prompt caching. `DeepSeek` uses the OpenAI-compatible API at `https://api.deepseek.com/v1` and supports stop sequences.
+
+The active LLM is selected via the `"LLM"` field in `appsettings.json` (see [configuration.md](configuration.md#llm)).
 
 ---
 

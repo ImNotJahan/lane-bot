@@ -8,6 +8,7 @@
     - [`"TimezoneSettings"`](#timezonesettings)
     - [`"Logging"`](#logging)
     - [`"RespondToThought"`](#respondtothought)
+    - [`"LLM"`](#llm)
     - [`"Body"`](#body)
     - [`"Speech"`](#speech)
     - [`"Hearing"`](#hearing)
@@ -19,6 +20,7 @@ are as follows:
 ```
 DISCORD_API_KEY=
 ANTHROPIC_API_KEY=
+DEEPSEEK_API_KEY=
 QDRANT_API_KEY=
 QDRANT_ENDPOINT=
 OPENAI_EMBEDDING_ENDPOINT=
@@ -29,7 +31,8 @@ ELEVENLABS_KEY=
 ```
 
 - `DISCORD_API_KEY` is needed iff using the Discord body
-- `ANTHROPIC_API_KEY` is needed iff using Anthropic as LLM
+- `ANTHROPIC_API_KEY` is needed iff using Anthropic Claude as LLM
+- `DEEPSEEK_API_KEY` is needed iff using DeepSeek as LLM
 - `QDRANT_API_KEY`, `QDRANT_ENDPOINT`, `OPENAI_EMBEDDING_ENDPOINT`, and `OPENAI_EMBEDDING_API_KEY` are needed iff using RAG memory
 - `AZURE_KEY` and `AZURE_REGION` are needed iff using Azure for TTS or STT
 - `ELEVENLABS_KEY` is needed iff using ElevenLabs for TTS
@@ -88,7 +91,7 @@ This block has two fields:
 This is a block specifying how logging should be handled. It has three fields:
 1. `"ConsoleLevel"`: the minimum level a logged message should have to be outputted to the console.
 2. `"FileLevel"`: the minimum level a logged message should have to be outputted to the log file.
-3. `"FileLogPath"`: the path to the file to log to.
+3. `"FileLogPath"`: the path to the file to log to. The token `<date>` in the path is replaced with the current date at startup (e.g. `"lane-<date>.log"` → `"lane-2026-04-09.log"`).
 
 The possible values for a logging level are as follows:
 - `"Trace"`
@@ -103,9 +106,14 @@ The possible values for a logging level are as follows:
 The interval, in seconds, between when the bot receives a message and when it should next think.
 Should be an integer.
 
+### `"LLM"`
+The language model backend to use. Possible values:
+- `"Claude"`: Anthropic Claude Haiku 4.5 (default if omitted)
+- `"DeepSeek"`: DeepSeek `deepseek-chat`
+
 ### `"Body"`
 The interface the bot should run with. Possible values:
-- `"Discord"`: runs as a Discord bot
+- `"Discord"`: runs as a Discord bot; a dashboard TUI launches in the terminal
 - `"Terminal"`: runs in the terminal (default if omitted)
 
 This can also be overridden at runtime via the `discord` or `terminal` command-line arguments.
@@ -183,6 +191,7 @@ Here's what an example `appsettings.json` could look like:
             "MinuteShift": 0
         },
         "RespondToThought": 5,
+        "LLM": "Claude",
         "Body": "Discord",
         "Logging": {
             "ConsoleLevel": "Warning",

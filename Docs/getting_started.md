@@ -11,7 +11,8 @@ To get Lane running you'll need at minimum an Anthropic API key. Everything else
 
 | Feature | Required keys/services |
 |---|---|
-| Core (LLM responses) | `ANTHROPIC_API_KEY` |
+| Core — Claude LLM | `ANTHROPIC_API_KEY` |
+| Core — DeepSeek LLM | `DEEPSEEK_API_KEY` |
 | Discord | `DISCORD_API_KEY` (bot application) |
 | RAG memory | `QDRANT_API_KEY`, `QDRANT_ENDPOINT`, `OPENAI_EMBEDDING_API_KEY`, `OPENAI_EMBEDDING_ENDPOINT` |
 | Voice — TTS via ElevenLabs | `ELEVENLABS_KEY` |
@@ -23,6 +24,7 @@ Once you have your keys, create a `.env` file in the root of the `Wizard` folder
 ```
 DISCORD_API_KEY=
 ANTHROPIC_API_KEY=
+DEEPSEEK_API_KEY=
 QDRANT_API_KEY=
 QDRANT_ENDPOINT=
 OPENAI_EMBEDDING_ENDPOINT=
@@ -38,6 +40,7 @@ Only populate the fields relevant to your setup — unused keys can be left blan
 
 Lane is configured via `appsettings.json` in the `Wizard` folder. The most important things to set for a first-time setup:
 
+- **`"LLM"`** — set to `"Claude"` (default) or `"DeepSeek"`.
 - **`"Body"`** — set to `"Discord"` or `"Terminal"`. If omitted, defaults to `"Terminal"`.
 - **`"MemoryHandlers"`** — if you don't have Qdrant set up, don't include a `RAG` handler. A `SlidingWindow` is sufficient to get started.
 - **`"DefaultDiscordChannel"`** — required for Discord; the channel ID Lane uses for unprompted messages.
@@ -87,7 +90,7 @@ Run the binary to start Lane. The body is determined by the `"Body"` field in `a
 
 **First run**: Lane starts with no memory and builds it up as conversations happen. Memory is persisted to a `data.json` file next to the binary after every message, so it survives restarts.
 
-**Discord**: Lane automatically joins the first voice channel in your server on startup if `Speech` or `Hearing` is configured. The monologue loop starts on connection, so Lane may send unprompted messages to `DefaultDiscordChannel` on her own.
+**Discord**: Lane automatically joins the first voice channel in your server on startup if `Speech` or `Hearing` is configured. The monologue loop starts on connection, so Lane may send unprompted messages to `DefaultDiscordChannel` on her own. A dashboard TUI launches in the terminal showing live logs, token usage, next-thought countdown, and the active configuration.
 
 **Terminal**: a simple read-eval loop. Type a message and press enter. The monologue does not run in Terminal mode.
 

@@ -15,6 +15,7 @@
     - [Monologue](how_it_works.md#monologue)
     - [Memory assembly](how_it_works.md#memory-assembly)
     - [Voice](how_it_works.md#voice-discord)
+    - [Dashboard](how_it_works.md#dashboard-discord)
 5. [Interfaces](interfaces.md)
     - [ILLM](interfaces.md#illm--language-model)
     - [IMemoryHandler](interfaces.md#imemoryhandler--memory-backend)

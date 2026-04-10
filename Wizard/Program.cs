@@ -1,7 +1,6 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json.Linq;
 using Terminal.Gui.App;
-using Terminal.Gui.Views;
 using Wizard.Head;
 using Wizard.LLM;
 using Wizard.Memory;
@@ -132,10 +131,11 @@ namespace Wizard
                 Console.WriteLine("Connected");
             } else if(selectedBody == Body.Terminal)
             {
-                throw new Exception("Terminal needs to be worked on");
                 Wizard.Body.Terminal terminal = new(bot);
 
                 await terminal.BeginLoop();
+                
+                return;
             }
 
             app.Run(new DashboardView(bot, llm));
