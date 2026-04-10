@@ -1,5 +1,9 @@
-Recent conversation and thoughts:
+Recent conversation:
 <messages>
 {0}</messages>
+
+Recent thoughts:
+<thoughts>
+{2}</thoughts>
 
 Current time: {1}

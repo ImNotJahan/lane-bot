@@ -67,7 +67,7 @@ namespace Wizard.LLM
                 response.Usage.InputTokenDetails.CachedTokenCount
             );
 
-            return new(formattedResponse, Author.Bot);
+            return new(formattedResponse, Author.Bot, time: DateTime.Now);
         }
     }
 }
