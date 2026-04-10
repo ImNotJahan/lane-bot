@@ -4,6 +4,8 @@ using OpenAI.Embeddings;
 using Qdrant.Client.Grpc;
 using Azure.AI.OpenAI;
 using Azure;
+using RX;
+using Google.Protobuf.Collections;
 
 namespace Wizard.Memory
 {
@@ -42,15 +44,20 @@ namespace Wizard.Memory
 
             foreach(MessageContainer m in memory)
             {
-                points.Add(new()
+                PointStruct point = new()
                 {
                     Id      = new() { Uuid = Guid.NewGuid().ToString() },
                     Vectors = await CalculateVectors(m),
-                    Payload = {
+                    Payload =
+                    {
                         ["text"]   = m.GetContent(),
                         ["author"] = (int) m.GetAuthor()
                     }
-                });
+                };
+
+                if (m.GetTime() is DateTime nonNull) point.Payload["time"] = nonNull.ToString();
+
+                points.Add(point);
             }
 
             await qdrant.UpsertAsync(CollectionName, points);
@@ -72,9 +79,14 @@ namespace Wizard.Memory
 
             foreach(ScoredPoint point in points)
             {
+                DateTime? time = point.Payload.TryGetValue("time", out Value value) 
+                               ? DateTime.Parse(value.StringValue) 
+                               : null;
+
                 messages.Add(new(
                     point.Payload["text"].StringValue,
-                    (Author) point.Payload["author"].IntegerValue
+                    (Author) point.Payload["author"].IntegerValue,
+                    time: time
                 ));
             }
 

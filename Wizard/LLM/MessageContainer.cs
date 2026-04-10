@@ -8,21 +8,22 @@ namespace Wizard.LLM
     public sealed class MessageContainer
     {
         // either the text of the message, or a base64 encoding of an image
-        readonly string   content;
-        readonly Author   author;
-        readonly DateTime time;
+        readonly string    content;
+        readonly Author    author;
+        readonly DateTime? time;
 
         readonly MessageType type;
 
         public MessageContainer(
             string      content,
             Author      author = Author.User,
-            MessageType type   = MessageType.Text
+            MessageType type   = MessageType.Text,
+            DateTime?   time   = null
         )
         {
             this.content = content;
             this.author  = author;  
-            this.time    = DateTime.UtcNow;
+            this.time    = time;
             this.type    = type;
         }
 
@@ -107,12 +108,13 @@ namespace Wizard.LLM
         public string      GetContent()     => content;
         public Author      GetAuthor()      => author;
         public MessageType GetMessageType() => type;
+        public DateTime?   GetTime()        => time;
 
         public override string ToString()
         {
             string formatted = GetContent();
 
-            formatted = "[" + FormatTime(time) + "] " + formatted;
+            if (time is not null) formatted = $"[{FormatTime((DateTime) time)}] {formatted}";
 
             return formatted;
         }
@@ -123,11 +125,24 @@ namespace Wizard.LLM
         /// </summary>
         /// <param name="time">The time to format</param>
         /// <returns>The time formatted</returns>
-        public static string FormatTime(DateTime time)
+        public static string FormatTime(DateTime time, bool includeTimeSince = true)
         {
-            return time.AddHours  (Settings.instance is null ? 0 : Settings.instance.TimezoneSettings.HourShift)
-                       .AddMinutes(Settings.instance is null ? 0 : Settings.instance.TimezoneSettings.MinuteShift)
-                       .ToString  ("yyyy/MM/dd HH:mm:ss");
+            DateTime shiftedTime = time.AddHours(Settings.instance is null ? 0 : Settings.instance.TimezoneSettings.HourShift)
+                                       .AddMinutes(Settings.instance is null ? 0 : Settings.instance.TimezoneSettings.MinuteShift);
+
+            return shiftedTime.ToString("yyyy/MM/dd HH:mm:ss") + (includeTimeSince ? $" ({TimeSince(time)})" : "");
+        }
+
+        public static string TimeSince(DateTime time)
+        {
+            return (DateTime.Now - time) switch
+            {
+                { TotalHours: < 1 } ts => $"{ts.Minutes} minutes ago",
+                { TotalDays: < 1 }  ts => $"{ts.Hours} hours ago",
+                { TotalDays: < 2 }     => $"yesterday",
+                { TotalDays: < 5 }     => $"on {time.DayOfWeek}",
+                TimeSpan ts            => $"{ts.Days} days ago",
+            };
         }
 
         public JToken Serialize()

@@ -61,9 +61,9 @@ namespace Wizard.Head
 
             Logger.LogInformation("Recieved message {0}", message);
 
-            foreach(string url in imageUrls) await RememberMessage(new(url, Author.User, MessageType.Image));
+            foreach(string url in imageUrls) await RememberMessage(new(url, Author.User, MessageType.Image, DateTime.Now));
 
-            MessageContainer       formattedMessage = new($"{author} says: {message}");
+            MessageContainer       formattedMessage = new($"{author} says: {message}", time: DateTime.Now);
             List<MessageContainer> recentMessages   = await AssembleContext(formattedMessage, true, false);
             float                  enthusiasm       = await Enthusiasm(recentMessages, formattedMessage);
 
@@ -151,7 +151,7 @@ namespace Wizard.Head
                 }
 
                 formattedContext += message.ToString();
-                formattedContext += "\n";
+                formattedContext += "\n\n";
             }
 
             return formattedContext;
@@ -210,14 +210,19 @@ namespace Wizard.Head
         {
             while(true)
             {
-                string memoryContext       = ContextToString(await AssembleContext(lastThought, false, true));
-                string conversationContext = ContextToString(await AssembleContext(lastThought, true,  false));
+                string memoryContext = ContextToString(await AssembleContext(lastThought, false, true));
+
+                List<MessageContainer> recentContext = await AssembleContext(lastThought, true, false);
+                
+                string conversationContext = ContextToString([.. recentContext.Where(m => m.GetMessageType() != MessageType.Thought)]);
+                string thoughtContext      = ContextToString([.. recentContext.Where(m => m.GetMessageType() == MessageType.Thought)]);
 
                 string cachedDynamicPrompt = string.Format(Prompts.GetPrompt("Monologue_Memory"), memoryContext);
                 string dynamicPrompt       = string.Format(
                     Prompts.GetPrompt("Monologue_Dynamic"),
                     conversationContext,
-                    MessageContainer.FormatTime(DateTime.UtcNow)
+                    MessageContainer.FormatTime(DateTime.UtcNow, false),
+                    thoughtContext
                 );
 
                 Logger.LogDebug("Monologuing with dynamic prompt: " + dynamicPrompt);
@@ -254,7 +259,7 @@ namespace Wizard.Head
                 Logger.LogInformation("[Thought] " + thought);
                 Logger.LogDebug($"Will think again in {timeUntilThought} seconds");
 
-                lastThought = new(thought, Author.Bot, MessageType.Thought);
+                lastThought = new(thought, Author.Bot, MessageType.Thought, DateTime.Now);
 
                 await RememberMessage(lastThought);
 
@@ -264,7 +269,7 @@ namespace Wizard.Head
                     Logger.LogInformation("Will verbalize from monologue: " + message);
                     OnHadGoodThought?.Invoke(message);
 
-                    await RememberMessage(new(message, Author.Bot));
+                    await RememberMessage(new(message, Author.Bot, time: DateTime.Now));
                 }
 
                 WriteData();

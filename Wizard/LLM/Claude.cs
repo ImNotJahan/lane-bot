@@ -74,6 +74,7 @@ namespace Wizard.LLM
         )
         {
             Logger.LogDebug("Prompting Claude with cached dynamic prompt:" + cachedDynamicPrompt);
+            Logger.LogDebug("Prompting Claude with dynamic prompt:" + dynamicPrompt);
 
             Message response = await client.Messages.Create(CreateParams(
                 context, systemPrompt, cachedDynamicPrompt, dynamicPrompt, stopSequences ?? []
@@ -103,7 +104,7 @@ namespace Wizard.LLM
                 (int) (response.Usage.CacheReadInputTokens ?? 0)
             );
 
-            return new(formattedResponse, Author.Bot);
+            return new(formattedResponse, Author.Bot, time: DateTime.Now);
         }
     }
 }
