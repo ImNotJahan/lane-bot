@@ -259,7 +259,7 @@ namespace Wizard.Head
                 Logger.LogInformation("[Thought] " + thought);
                 Logger.LogDebug($"Will think again in {timeUntilThought} seconds");
 
-                lastThought = new(thought, Author.Bot, MessageType.Thought, DateTime.Now);
+                lastThought = new(thought, Author.Bot, MessageType.Thought, DateTime.UtcNow);
 
                 await RememberMessage(lastThought);
 
@@ -269,7 +269,7 @@ namespace Wizard.Head
                     Logger.LogInformation("Will verbalize from monologue: " + message);
                     OnHadGoodThought?.Invoke(message);
 
-                    await RememberMessage(new(message, Author.Bot, time: DateTime.Now));
+                    await RememberMessage(new(message, Author.Bot, time: DateTime.UtcNow));
                 }
 
                 WriteData();

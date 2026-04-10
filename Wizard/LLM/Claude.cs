@@ -104,7 +104,7 @@ namespace Wizard.LLM
                 (int) (response.Usage.CacheReadInputTokens ?? 0)
             );
 
-            return new(formattedResponse, Author.Bot, time: DateTime.Now);
+            return new(formattedResponse, Author.Bot, time: DateTime.UtcNow);
         }
     }
 }
