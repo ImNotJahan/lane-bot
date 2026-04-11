@@ -114,7 +114,9 @@ namespace Wizard.LLM
         {
             string formatted = GetContent();
 
-            if (time is not null) formatted = $"[{FormatTime((DateTime) time)}] {formatted}";
+            string mid = author == Author.Bot ? "Lane says:" : ""; 
+
+            if (time is not null) formatted = $"[{FormatTime((DateTime) time)}] {mid} {formatted}";
 
             return formatted;
         }

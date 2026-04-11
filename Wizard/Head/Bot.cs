@@ -23,6 +23,7 @@ namespace Wizard.Head
         readonly int timeBetweenMessageAndThought = respondToMessage;
 
         bool recievedMessageRecently = false;
+        bool isResponding            = false;
 
         private async Task<List<MessageContainer>> AssembleContext(
             MessageContainer? message,
@@ -64,6 +65,16 @@ namespace Wizard.Head
             foreach(string url in imageUrls) await RememberMessage(new(url, Author.User, MessageType.Image, DateTime.UtcNow));
 
             MessageContainer       formattedMessage = new($"{author} says: {message}", time: DateTime.UtcNow);
+
+            if(isResponding)
+            {
+                Logger.LogInformation("Already responding to a message, ignoring {0}", message);
+
+                await RememberMessage(formattedMessage);
+
+                return null;
+            }
+
             List<MessageContainer> recentMessages   = await AssembleContext(formattedMessage, true, false);
             float                  enthusiasm       = await Enthusiasm(recentMessages, formattedMessage);
 
@@ -79,16 +90,25 @@ namespace Wizard.Head
 
             Logger.LogInformation($"Decided to respond to message (enthusiasm {enthusiasm})");
 
-            MessageContainer response = await RespondToMessage(formattedMessage, enthusiasm);
+            isResponding = true;
 
-            Logger.LogInformation("Will respond with {0}", response.GetContent());
+            try
+            {
+                MessageContainer response = await RespondToMessage(formattedMessage, enthusiasm);
 
-            await RememberMessage(formattedMessage);
-            await RememberMessage(response);
+                Logger.LogInformation("Will respond with {0}", response.GetContent());
 
-            WriteData();
-            
-            return response;
+                await RememberMessage(formattedMessage);
+                await RememberMessage(response);
+
+                WriteData();
+
+                return response;
+            }
+            finally
+            {
+                isResponding = false;
+            }
         }
 
         public void WriteData()
