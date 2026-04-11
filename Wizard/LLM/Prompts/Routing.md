@@ -28,6 +28,9 @@ Score 0.0 if:
 - The message is empty, meaningless, or a duplicate
 - The message seems unfinished
 
-DO NOT list any reasoning. Only reply with a single float (e.g. 0.7).
+DO NOT list any reasoning. Only reply with JSON in this exact format, no other text:
+{"enthusiasm": 0.7, "emoticon": ":3"}
 
-Enthusiasm score:
+Where:
+- enthusiasm: a float between 0.0 and 1.0 as described above
+- emoticon: a short text emoticon (e.g. ":3", "( ._.)","o_o", ">_>") reflecting Lane's reaction to this message

@@ -68,9 +68,10 @@ namespace Wizard.Utility
         }
 
         public static void LogInformation(string? message, params object[] args) => logger.LogInformation(message, args);
-        public static void LogWarning    (string? message, params object[] args) => logger.LogWarning(message, args);
-        public static void LogError      (string? message, params object[] args) => logger.LogError(message, args);
-        public static void LogDebug      (string? message, params object[] args) => logger.LogDebug(message, args);
+        public static void LogWarning    (string? message, params object[] args) => logger.LogWarning    (message, args);
+        public static void LogError      (string? message, params object[] args) => logger.LogError      (message, args);
+        public static void LogDebug      (string? message, params object[] args) => logger.LogDebug      (message, args);
+        public static void LogTrace      (string? message, params object[] args) => logger.LogTrace      (message, args);
 
         public static BufferLog Buffer() => log;
     }

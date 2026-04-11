@@ -73,8 +73,8 @@ namespace Wizard.LLM
             List<string>?          stopSequences       = null
         )
         {
-            Logger.LogDebug("Prompting Claude with cached dynamic prompt:" + cachedDynamicPrompt);
-            Logger.LogDebug("Prompting Claude with dynamic prompt:" + dynamicPrompt);
+            Logger.LogTrace("Prompting Claude with cached dynamic prompt:" + cachedDynamicPrompt);
+            Logger.LogTrace("Prompting Claude with dynamic prompt:" + dynamicPrompt);
 
             Message response = await client.Messages.Create(CreateParams(
                 context, systemPrompt, cachedDynamicPrompt, dynamicPrompt, stopSequences ?? []
@@ -90,7 +90,7 @@ namespace Wizard.LLM
                 }
             }
 
-            Logger.LogDebug(
+            Logger.LogTrace(
                 "Token usage — input: {0}, output: {1}, cache write: {2}, cache read: {3}",
                 response.Usage.InputTokens,
                 response.Usage.OutputTokens,

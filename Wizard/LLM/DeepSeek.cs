@@ -36,7 +36,7 @@ namespace Wizard.LLM
             if (cachedDynamicPrompt != "") system += "\n\n" + cachedDynamicPrompt;
             if (dynamicPrompt       != "") system += "\n\n" + dynamicPrompt;
 
-            Logger.LogDebug("Prompting DeepSeek with prompt:" + system);
+            Logger.LogTrace("Prompting DeepSeek with prompt:" + system);
 
             List<ChatMessage> messages = [new SystemChatMessage(system)];
 
@@ -54,7 +54,7 @@ namespace Wizard.LLM
 
             string formattedResponse = response.Content[0].Text;
 
-            Logger.LogDebug(
+            Logger.LogTrace(
                 "Token usage — input: {0}, output: {1}, cached: {2}",
                 response.Usage.InputTokenCount,
                 response.Usage.OutputTokenCount,
