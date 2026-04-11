@@ -65,7 +65,7 @@ namespace Wizard.Head
 
             foreach(string url in imageUrls) await RememberMessage(new(url, Author.User, MessageType.Image, DateTime.UtcNow));
 
-            MessageContainer       formattedMessage = new($"{author} says: {message}", time: DateTime.UtcNow);
+            MessageContainer formattedMessage = new($"{author} says: {message}", time: DateTime.UtcNow);
 
             if(isResponding)
             {
@@ -107,6 +107,11 @@ namespace Wizard.Head
                 WriteData();
 
                 return response;
+            } catch(Exception e)
+            {
+                Logger.LogError(e.ToString());
+
+                return null;
             }
             finally
             {
@@ -189,7 +194,12 @@ namespace Wizard.Head
 
             Logger.LogTrace("Gauging enthusiasm with dynamic prompt: " + dynamicPrompt);
 
-            string result = (await llm.Prompt([message], Prompts.GetPrompt("Routing"), dynamicPrompt)).GetContent();
+            string result = (await llm.Prompt(
+                [message, new("```json", Author.Bot)],
+                Prompts.GetPrompt("Routing"),
+                dynamicPrompt,
+                stopSequences: ["```"]
+            )).GetContent();
 
             JObject data;
 
