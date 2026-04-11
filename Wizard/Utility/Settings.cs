@@ -14,6 +14,7 @@ namespace Wizard.Utility
         public          SpeechSettings?   Speech                { get; set; }
         public          HearingSettings?  Hearing               { get; set; }
         public required string            LLM                   { get; set; }
+        public          FaceSettings?     Face                  { get; set; }
     }
 
     public sealed class HandlerSettings
@@ -51,5 +52,12 @@ namespace Wizard.Utility
     public sealed class HearingSettings
     {
         public required string Ear { get; set; }
+    }
+
+    public sealed class FaceSettings
+    {
+        public required bool   Enabled     { get; set; }
+        public required int    Port        { get; set; }
+        public required string DefaultFace { get; set; }
     }
 }

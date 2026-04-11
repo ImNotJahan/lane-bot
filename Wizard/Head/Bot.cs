@@ -10,7 +10,8 @@ namespace Wizard.Head
         public delegate void     OnEvent(string text);
         public event    OnEvent? OnHadGoodThought;
 
-        public event Action<int>? TimeUntilThoughtChanged;
+        public event Action<int>?    TimeUntilThoughtChanged;
+        public event Action<string>? OnEmoticonChanged;
 
         readonly ILLM llm = llm;
 
@@ -75,25 +76,27 @@ namespace Wizard.Head
                 return null;
             }
 
-            List<MessageContainer> recentMessages   = await AssembleContext(formattedMessage, true, false);
-            float                  enthusiasm       = await Enthusiasm(recentMessages, formattedMessage);
-
-            if(enthusiasm <= 0.2f)
-            {
-                Logger.LogInformation($"Decided not to respond to message (enthusiasm {enthusiasm})");
-
-                await RememberMessage(formattedMessage);
-                WriteData();
-
-                return null;
-            }
-
-            Logger.LogInformation($"Decided to respond to message (enthusiasm {enthusiasm})");
-
             isResponding = true;
 
             try
             {
+                List<MessageContainer> recentMessages = await AssembleContext(formattedMessage, true, false);
+                (float enthusiasm, string emoticon)   = await Enthusiasm(recentMessages, formattedMessage);
+
+                OnEmoticonChanged?.Invoke(emoticon);
+
+                if(enthusiasm <= 0.2f)
+                {
+                    Logger.LogInformation($"Decided not to respond to message (enthusiasm {enthusiasm})");
+
+                    await RememberMessage(formattedMessage);
+                    WriteData();
+
+                    return null;
+                }
+
+                Logger.LogInformation($"Decided to respond to message (enthusiasm {enthusiasm})");
+
                 MessageContainer response = await RespondToMessage(formattedMessage, enthusiasm);
 
                 Logger.LogInformation("Will respond with {0}", response.GetContent());
@@ -148,7 +151,7 @@ namespace Wizard.Head
                 enthusiasmContext
             );
 
-            Logger.LogDebug("Responding to message with dynamic prompt: " + dynamicPrompt);
+            Logger.LogTrace("Responding to message with dynamic prompt: " + dynamicPrompt);
 
             return await llm.Prompt(
                 [message],
@@ -177,20 +180,33 @@ namespace Wizard.Head
             return formattedContext;
         }
 
-        private async Task<float> Enthusiasm(List<MessageContainer> context, MessageContainer message)
+        private async Task<(float enthusiasm, string emoticon)> Enthusiasm(List<MessageContainer> context, MessageContainer message)
         {
             string dynamicPrompt = string.Format(
                 Prompts.GetPrompt("Routing_Dynamic"),
                 ContextToString(context)
             );
 
-            Logger.LogDebug("Gauging enthusiasm with dynamic prompt: " + dynamicPrompt);
+            Logger.LogTrace("Gauging enthusiasm with dynamic prompt: " + dynamicPrompt);
 
             string result = (await llm.Prompt([message], Prompts.GetPrompt("Routing"), dynamicPrompt)).GetContent();
 
-            if(!float.TryParse(result, out float enthusiasm)) throw new InvalidRouterValue(result);
+            JObject data;
 
-            return enthusiasm;
+            try
+            {
+                data = JObject.Parse(result);
+            } catch
+            {
+                throw new InvalidRouterValue(result);
+            }
+
+            float?  enthusiasm = (float?)  data["enthusiasm"];
+            string? emoticon   = (string?) data["emoticon"];
+
+            if(enthusiasm is null || emoticon is null) throw new InvalidRouterValue(result);
+
+            return ((float) enthusiasm, emoticon);
         }
 
         bool monologueRunning = false;
@@ -245,7 +261,7 @@ namespace Wizard.Head
                     thoughtContext
                 );
 
-                Logger.LogDebug("Monologuing with dynamic prompt: " + dynamicPrompt);
+                Logger.LogTrace("Monologuing with dynamic prompt: " + dynamicPrompt);
 
                 MessageContainer response = await llm.Prompt(
                     [new("```json", Author.Bot)],
@@ -270,8 +286,11 @@ namespace Wizard.Head
 
                 timeUntilThought = (int?) data["next_thought_in_seconds"]
                                 ?? throw new InvalidMonologue("Did not have next_thought_in_seconds property");
-                
+
                 TimeUntilThoughtChanged?.Invoke(timeUntilThought);
+
+                string emoticon = (string?) data["emoticon"] ?? "( ._.)";
+                OnEmoticonChanged?.Invoke(emoticon);
 
                 string thought = (string?) data["thought"]
                               ?? throw new InvalidMonologue("Did not have thought property");

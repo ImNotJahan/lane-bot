@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>lane</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0e0e0e;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      font-family: monospace;
+    }
+    #emoticon {
+      color: #d4d4d4;
+      font-size: 6rem;
+      transition: opacity 0.25s ease;
+      user-select: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="emoticon">( ._.)
+  </div>
+  <script>
+    const el = document.getElementById('emoticon');
+    const es = new EventSource('/events');
+    es.onmessage = e => {
+      el.style.opacity = '0';
+      setTimeout(() => {
+        el.textContent = e.data;
+        el.style.opacity = '1';
+      }, 250);
+    };
+  </script>
+</body>
+</html>

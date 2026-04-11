@@ -121,6 +121,15 @@ namespace Wizard
                 }
             }
 
+            if (settings is not null && settings.Face is FaceSettings face && face.Enabled)
+            {
+                Wizard.Body.EmoticonServer emoticonServer = new(face.Port, face.DefaultFace);
+
+                emoticonServer.Start();
+                
+                bot.OnEmoticonChanged += emoticonServer.SetEmoticon;
+            }
+
             if(selectedBody == Body.Discord)
             {
                 ulong                defaultChannel = settings?.DefaultDiscordChannel ?? 0;
