@@ -26,6 +26,8 @@ namespace Wizard.Head
         bool recievedMessageRecently = false;
         bool isResponding            = false;
 
+        readonly Dictionary<string, int> bookPositions = [];
+
         private async Task<List<MessageContainer>> AssembleContext(
             MessageContainer? message,
             bool recentMessages = true,
@@ -130,11 +132,58 @@ namespace Wizard.Head
                     data[pair.Key] = pair.Value.Serialize();
                 }
 
+                JObject positions = [];
+                foreach(KeyValuePair<string, int> pair in bookPositions)
+                    positions[pair.Key] = pair.Value;
+
+                data["BookPositions"] = positions;
+
                 JSONWriter.WriteData(data);
             } catch(Exception exception)
             {
                 Logger.LogError(exception.ToString());
             }
+        }
+
+        public void LoadBookPositions(JObject data)
+        {
+            if(data["BookPositions"] is not JObject positions) return;
+
+            foreach(KeyValuePair<string, JToken?> pair in positions)
+            {
+                if(pair.Value is not null)
+                    bookPositions[pair.Key] = (int) pair.Value;
+            }
+        }
+
+        // Returns the next line of the book, advancing the saved position.
+        // Returns null if the file doesn't exist or has no more lines.
+        private string? ReadNextBookLine(string bookTitle)
+        {
+            string bookPath = Path.Join(AppContext.BaseDirectory, "Books", bookTitle + ".txt");
+
+            if(!File.Exists(bookPath))
+            {
+                Logger.LogWarning("Book file not found: {0}", bookPath);
+                return null;
+            }
+
+            string[] lines = File.ReadAllLines(bookPath)
+                                 .Where(l => !string.IsNullOrWhiteSpace(l) && !int.TryParse(l.Trim(), out _))
+                                 .ToArray();
+
+            if(lines.Length == 0) return null;
+
+            int position = bookPositions.TryGetValue(bookTitle, out int pos) ? pos : 0;
+
+            // wrap around if we've reached the end
+            if(position >= lines.Length) position = 0;
+
+            string line = lines[position];
+
+            bookPositions[bookTitle] = position + 1;
+
+            return line;
         }
 
         private async Task<MessageContainer> RespondToMessage(MessageContainer message, float enthusiasm)
@@ -234,20 +283,23 @@ namespace Wizard.Head
         {
             try
             {
-                Logger.LogInformation("Starting monologue...");
+                while(true)
+                {
+                    try
+                    {
+                        Logger.LogInformation("Starting monologue...");
 
-                await Monologue();
-            } catch(Exception exception)
-            {
-                Logger.LogError(exception.ToString());
+                        await Monologue();
+                    } catch(Exception exception)
+                    {
+                        Logger.LogError(exception.ToString());
+                        Logger.LogWarning("Monologue errored, restarting...");
+                    }
+                }
             } finally
             {
-                Logger.LogWarning("Monologue stopped running");
-
                 monologueRunning = false;
             }
-
-            _ = MonologueHandler();
         }
 
         MessageContainer? lastThought = null;
@@ -263,12 +315,18 @@ namespace Wizard.Head
                 string conversationContext = ContextToString([.. recentContext.Where(m => m.GetMessageType() != MessageType.Thought)]);
                 string thoughtContext      = ContextToString([.. recentContext.Where(m => m.GetMessageType() == MessageType.Thought)]);
 
+                string[] availableBooks = Settings.instance?.Books?.Available ?? [];
+                string   booksContext   = availableBooks.Length > 0
+                    ? string.Join("\n", availableBooks.Select(b => $"- {b}"))
+                    : "(none)";
+
                 string cachedDynamicPrompt = string.Format(Prompts.GetPrompt("Monologue_Memory"), memoryContext);
                 string dynamicPrompt       = string.Format(
                     Prompts.GetPrompt("Monologue_Dynamic"),
                     conversationContext,
                     MessageContainer.FormatTime(DateTime.UtcNow, false),
-                    thoughtContext
+                    thoughtContext,
+                    booksContext
                 );
 
                 Logger.LogTrace("Monologuing with dynamic prompt: " + dynamicPrompt);
@@ -301,6 +359,31 @@ namespace Wizard.Head
 
                 string emoticon = (string?) data["emoticon"] ?? "( ._.)";
                 OnEmoticonChanged?.Invoke(emoticon);
+
+                string? readBook = (string?) data["read"];
+                if(!string.IsNullOrWhiteSpace(readBook))
+                {
+                    string? line = ReadNextBookLine(readBook);
+
+                    if(line is not null)
+                    {
+                        Logger.LogInformation("[Reading: {0}] {1}", readBook, line);
+
+                        MessageContainer readThought = new(
+                            $"[Read: {readBook}] {line}",
+                            Author.Bot,
+                            MessageType.Text,
+                            DateTime.UtcNow
+                        );
+
+                        await RememberMessage(readThought);
+
+                        lastThought = readThought;
+
+                        // trigger another monologue immediately to react to what was just read
+                        timeUntilThought = Settings.instance?.Books?.ReadThoughtInterval ?? 60;
+                    }
+                }
 
                 string thought = (string?) data["thought"]
                               ?? throw new InvalidMonologue("Did not have thought property");
