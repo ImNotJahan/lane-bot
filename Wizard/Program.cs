@@ -107,18 +107,20 @@ namespace Wizard
 
             if (JSONWriter.HasData())
             {
-                JObject? data =  JSONWriter.ReadData() as JObject 
+                JObject? data =  JSONWriter.ReadData() as JObject
                               ?? throw new Exception("Data is null");
-                
+
                 foreach (KeyValuePair<string, JToken?> pair in data)
                 {
-                    IMemoryHandler? handler = memoryHandlers[pair.Key];
+                    IMemoryHandler? handler = memoryHandlers.GetValueOrDefault(pair.Key);
 
                     if(handler is null)    continue;
                     if(pair.Value is null) continue;
 
                     handler.Deserialize(pair.Value);
                 }
+
+                bot.LoadBookPositions(data);
             }
 
             if (settings is not null && settings.Face is FaceSettings face && face.Enabled)
