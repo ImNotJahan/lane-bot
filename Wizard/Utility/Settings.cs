@@ -14,6 +14,7 @@ namespace Wizard.Utility
         public          SpeechSettings?   Speech                { get; set; }
         public          HearingSettings?  Hearing               { get; set; }
         public required string            LLM                   { get; set; }
+        public required string            Model                 { get; set; }
         public          FaceSettings?     Face                  { get; set; }
         public          BookSettings?     Books                 { get; set; }
     }
