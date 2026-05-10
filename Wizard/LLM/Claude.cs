@@ -6,7 +6,6 @@ namespace Wizard.LLM
 {
     public sealed class Claude : ILLM
     {
-        const string Model     = "claude-haiku-4-5-20251001";
         const int    MaxTokens = 1024;
         
         readonly AnthropicClient client;
@@ -57,7 +56,7 @@ namespace Wizard.LLM
             return new()
             {
                 MaxTokens     = MaxTokens,
-                Model         = Model,
+                Model         = Settings.instance?.Model ?? "claude-haiku-4-5-20251001",
                 Temperature   = 1,
                 System        = systemBlocks,
                 Messages      = messages,
