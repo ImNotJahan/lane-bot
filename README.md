@@ -39,7 +39,7 @@ Lane is a Discord/terminal chatbot designed to feel authentic and personality-dr
 | Component | Technology |
 |---|---|
 | Language | C# (.NET 10) |
-| LLM | Anthropic Claude Haiku 4.5 or DeepSeek (`deepseek-chat`) |
+| LLM | Anthropic, DeepSeek, or OpenRouter models |
 | Vector embeddings | OpenAI `text-embedding-3-small` |
 | Vector database | Qdrant |
 | TTS | ElevenLabs or Azure |
