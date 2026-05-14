@@ -36,6 +36,8 @@ namespace Wizard.LLM
             if(content is null) throw new Exception("Content is null");
             if(author  is null) throw new Exception("Author is null");
 
+            content = Clean(content);
+
             DateTime? time = (DateTime?) data["time"];
 
             if(time is not null) this.time = (DateTime) time;
@@ -51,6 +53,13 @@ namespace Wizard.LLM
             
             this.author  = (Author) author;
             this.content = content;
+        }
+
+        private static string Clean(string text)
+        {
+            if (text.StartsWith("Lane says:")) text = text[10..];
+
+            return text;
         }
 
         public MessageParam Anthropic()
