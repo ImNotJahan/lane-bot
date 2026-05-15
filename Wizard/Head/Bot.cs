@@ -5,7 +5,13 @@ using Wizard.Utility;
 
 namespace Wizard.Head
 {
-    public sealed class Bot(ILLM llm, Dictionary<string, IMemoryHandler> memoryHandlers, int respondToMessage)
+    public sealed class Bot(
+        ILLM respondLLM, 
+        ILLM routingLLM, 
+        ILLM monologueLLM, 
+
+        Dictionary<string, IMemoryHandler> memoryHandlers, int respondToMessage
+    )
     {
         public delegate void     OnEvent(string text);
         public event    OnEvent? OnHadGoodThought;
@@ -13,7 +19,9 @@ namespace Wizard.Head
         public event Action<int>?    TimeUntilThoughtChanged;
         public event Action<string>? OnEmoticonChanged;
 
-        readonly ILLM llm = llm;
+        readonly ILLM respondLLM   = respondLLM;
+        readonly ILLM routingLLM   = routingLLM;
+        readonly ILLM monologueLLM = monologueLLM;
 
         readonly Dictionary<string, IMemoryHandler> memoryHandlers = memoryHandlers;
 
@@ -207,7 +215,7 @@ namespace Wizard.Head
 
             Logger.LogTrace("Responding to message with dynamic prompt: " + dynamicPrompt);
 
-            return await llm.Prompt(
+            return await respondLLM.Prompt(
                 [message],
                 Prompts.GetPrompt("Respond"),
                 cachedDynamicPrompt,
@@ -243,7 +251,7 @@ namespace Wizard.Head
 
             Logger.LogTrace("Gauging enthusiasm with dynamic prompt: " + dynamicPrompt);
 
-            string result = (await llm.Prompt(
+            string result = (await routingLLM.Prompt(
                 [message, new("```json", Author.Bot)],
                 Prompts.GetPrompt("Routing"),
                 dynamicPrompt,
@@ -293,7 +301,9 @@ namespace Wizard.Head
                     } catch(Exception exception)
                     {
                         Logger.LogError(exception.ToString());
-                        Logger.LogWarning("Monologue errored, restarting...");
+                        Logger.LogWarning("Monologue errored, restarting in ten seconds..");
+
+                        await Task.Delay(10000);
                     }
                 }
             } finally
@@ -331,7 +341,7 @@ namespace Wizard.Head
 
                 Logger.LogTrace("Monologuing with dynamic prompt: " + dynamicPrompt);
 
-                MessageContainer response = await llm.Prompt(
+                MessageContainer response = await monologueLLM.Prompt(
                     [new("```json", Author.Bot)],
                     Prompts.GetPrompt("Monologue"),
                     cachedDynamicPrompt,

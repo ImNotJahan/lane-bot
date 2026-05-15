@@ -11,10 +11,9 @@ namespace Wizard.Utility
         public required int               RespondToThought      { get; set; }
         public required LoggingSettings   Logging               { get; set; }
         public required string            Body                  { get; set; }
+        public required LLMsSettings      LLMs                  { get; set; }
         public          SpeechSettings?   Speech                { get; set; }
         public          HearingSettings?  Hearing               { get; set; }
-        public required string            LLM                   { get; set; }
-        public required string            Model                 { get; set; }
         public          FaceSettings?     Face                  { get; set; }
         public          BookSettings?     Books                 { get; set; }
     }
@@ -67,5 +66,19 @@ namespace Wizard.Utility
     {
         public required string[] Available           { get; set; }
         public required int      ReadThoughtInterval { get; set; }
+    }
+
+    public sealed class LLMsSettings
+    {
+        public required LLMSettings  Respond   { get; set; }
+        public required LLMSettings  Routing   { get; set; }
+        public required LLMSettings  Monologue { get; set; }
+        public          LLMSettings? Summarize { get; set; }
+    }
+
+    public sealed class LLMSettings
+    {
+        public required string LLM   { get; set; }
+        public required string Model { get; set; }
     }
 }
