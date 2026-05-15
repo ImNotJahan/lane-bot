@@ -11,6 +11,8 @@ namespace Wizard
 {
     internal class Program
     {
+        public const string DEFAULT_MODEL = "claude-haiku-4-5-20251001";
+
         static async Task Main(string[] args)
         {
             IConfigurationRoot config = new ConfigurationBuilder()
@@ -52,22 +54,28 @@ namespace Wizard
                 };
             }
 
-            ILLM ParseLLM(LLMSettings? llmSettings) => llmSettings?.LLM switch
+            static ILLM ParseLLM(LLMSettings? llmSettings) => llmSettings?.LLM switch
             {
                 "Claude"     => new Claude    (llmSettings.Model),
                 "DeepSeek"   => new DeepSeek  (llmSettings.Model),
                 "OpenRouter" => new OpenRouter(llmSettings.Model),
-                null         => new Claude    ("claude-haiku-4-5-20251001"),
+                null         => new Claude    (DEFAULT_MODEL),
                 _            => throw new Exception($"Invalid LLM {llmSettings.LLM}")
             };
             
 
             Dictionary<string, IMemoryHandler> memoryHandlers = [];
 
+            ILLM respondLLM   = ParseLLM(settings?.LLMs.Respond);
+            ILLM routingLLM   = ParseLLM(settings?.LLMs.Routing);
+            ILLM monologueLLM = ParseLLM(settings?.LLMs.Monologue);
+            
+            ILLM? summarizeLLM = null;
+
             Bot bot = new(
-                ParseLLM(settings?.LLMs.Respond),
-                ParseLLM(settings?.LLMs.Routing),
-                ParseLLM(settings?.LLMs.Monologue),
+                respondLLM,
+                routingLLM,
+                monologueLLM,
                 memoryHandlers, 
                 Settings.instance?.RespondToThought ?? 60
             );
@@ -93,9 +101,11 @@ namespace Wizard
                             break;
                         
                         case "Summary":
+                            summarizeLLM = ParseLLM(settings?.LLMs.Summarize);
+
                             memoryHandlers.Add(id, new Summary(
                                 handler.Args["UpdateInterval"], 
-                                ParseLLM(settings?.LLMs.Summarize)
+                                summarizeLLM
                             ));
                             break;
                         
@@ -156,7 +166,11 @@ namespace Wizard
                 return;
             }
 
-            app.Run(new DashboardView(bot));
+            app.Run(new DashboardView(
+                bot, 
+                summarizeLLM is null ? [respondLLM, routingLLM, monologueLLM] 
+                                     : [respondLLM, routingLLM, monologueLLM, summarizeLLM]
+            ));
         }
 
         enum Body
