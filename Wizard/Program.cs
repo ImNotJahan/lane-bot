@@ -52,19 +52,25 @@ namespace Wizard
                 };
             }
 
-            ILLM llm;
-            if(settings is null) llm = new Claude();
-            else llm = settings.LLM switch
+            ILLM ParseLLM(LLMSettings? llmSettings) => llmSettings?.LLM switch
             {
-                "Claude"     => new Claude(),
-                "DeepSeek"   => new DeepSeek(),
-                "OpenRouter" => new OpenRouter(),
-                _            => throw new Exception($"Invalid LLM {settings.LLM}")
+                "Claude"     => new Claude    (llmSettings.Model),
+                "DeepSeek"   => new DeepSeek  (llmSettings.Model),
+                "OpenRouter" => new OpenRouter(llmSettings.Model),
+                null         => new Claude    ("claude-haiku-4-5-20251001"),
+                _            => throw new Exception($"Invalid LLM {llmSettings.LLM}")
             };
+            
 
             Dictionary<string, IMemoryHandler> memoryHandlers = [];
 
-            Bot bot = new(llm, memoryHandlers, Settings.instance is null ? 60 : Settings.instance.RespondToThought);
+            Bot bot = new(
+                ParseLLM(settings?.LLMs.Respond),
+                ParseLLM(settings?.LLMs.Routing),
+                ParseLLM(settings?.LLMs.Monologue),
+                memoryHandlers, 
+                Settings.instance?.RespondToThought ?? 60
+            );
 
             if(settings is null)
             {
@@ -89,7 +95,7 @@ namespace Wizard
                         case "Summary":
                             memoryHandlers.Add(id, new Summary(
                                 handler.Args["UpdateInterval"], 
-                                llm
+                                ParseLLM(settings?.LLMs.Summarize)
                             ));
                             break;
                         
@@ -150,7 +156,7 @@ namespace Wizard
                 return;
             }
 
-            app.Run(new DashboardView(bot, llm));
+            app.Run(new DashboardView(bot));
         }
 
         enum Body

@@ -11,20 +11,11 @@ namespace Wizard.UI
 
             string llm, body, ear, mouth;
 
-            if (Settings.instance is null)
-            {
-                llm   = "Claude";
-                body  = "Terminal";
-                ear   = "N/A";
-                mouth = "N/A";
-            }
-            else
-            {
-                llm   = Settings.instance.LLM;
-                body  = Settings.instance.Body;
-                ear   = Settings.instance.Hearing is null ? "N/A" : Settings.instance.Hearing.Ear;
-                mouth = Settings.instance.Speech  is null ? "N/A" : Settings.instance.Speech.Mouth;
-            }
+
+            llm   = "hi";//Settings.instance.LLM;
+            body  = Settings.instance?.Body ?? "Terminal";
+            ear   = Settings.instance?.Hearing?.Ear   ?? "N/A";
+            mouth = Settings.instance?.Speech ?.Mouth ?? "N/A";
 
             Label configLabel = new()
             {

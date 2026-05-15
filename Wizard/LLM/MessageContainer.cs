@@ -21,7 +21,7 @@ namespace Wizard.LLM
             DateTime?   time   = null
         )
         {
-            this.content = content;
+            this.content = Clean(content);
             this.author  = author;  
             this.time    = time;
             this.type    = type;
@@ -35,8 +35,6 @@ namespace Wizard.LLM
 
             if(content is null) throw new Exception("Content is null");
             if(author  is null) throw new Exception("Author is null");
-
-            content = Clean(content);
 
             DateTime? time = (DateTime?) data["time"];
 
@@ -58,6 +56,7 @@ namespace Wizard.LLM
         private static string Clean(string text)
         {
             if (text.StartsWith("Lane says:")) text = text[10..];
+            if (text.EndsWith  ("```"))        text = text[..^3];
 
             return text;
         }

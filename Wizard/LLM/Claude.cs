@@ -12,12 +12,16 @@ namespace Wizard.LLM
 
         public event ILLM.TokenUsageHandler? TokenUsage;
 
-        public Claude()
+        readonly string model;
+
+        public Claude(string model)
         {
             client = new()
             {
                 ApiKey = DotNetEnv.Env.GetString("ANTHROPIC_API_KEY")
             };
+
+            this.model = model;
         }
 
         private static MessageCreateParams CreateParams(
@@ -25,7 +29,8 @@ namespace Wizard.LLM
             string                 prompt, 
             string                 cachedDynamicPrompt, 
             string                 dynamicPrompt,
-            List<string>           stopSequences
+            List<string>           stopSequences,
+            string                 model
         )
         {
             List<MessageParam>    messages      = [];
@@ -56,7 +61,7 @@ namespace Wizard.LLM
             return new()
             {
                 MaxTokens     = MaxTokens,
-                Model         = Settings.instance?.Model ?? "claude-haiku-4-5-20251001",
+                Model         = model ?? "claude-haiku-4-5-20251001",
                 Temperature   = 1,
                 System        = systemBlocks,
                 Messages      = messages,
@@ -76,7 +81,7 @@ namespace Wizard.LLM
             Logger.LogTrace("Prompting Claude with dynamic prompt:" + dynamicPrompt);
 
             Message response = await client.Messages.Create(CreateParams(
-                context, systemPrompt, cachedDynamicPrompt, dynamicPrompt, stopSequences ?? []
+                context, systemPrompt, cachedDynamicPrompt, dynamicPrompt, stopSequences ?? [], model
             ));
 
             string formattedResponse = "";

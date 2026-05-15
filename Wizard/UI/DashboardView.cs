@@ -7,7 +7,7 @@ namespace Wizard.UI
 {
     public sealed class DashboardView : Window
     {
-        public DashboardView(Bot bot, ILLM llm)
+        public DashboardView(Bot bot/*, ILLM llm*/)
         {
             Title = "lane dashboard";
 
@@ -38,18 +38,18 @@ namespace Wizard.UI
                 Width  = Dim.Fill(),
                 Height = Dim.Fill()
             };
-            TokenView tokenView = new(llm)
+            /*TokenView tokenView = new(llm)
             {
                 X      = Pos.Right(nextThoughtView),
                 Y      = 0,
                 Width  = Dim.Fill(),
                 Height = Dim.Percent(40)
-            };
+            };*/
 
             Add(configView);
             Add(nextThoughtView);
             Add(logTailView);
-            Add(tokenView);
+            //Add(tokenView);
         }
     }
 }
