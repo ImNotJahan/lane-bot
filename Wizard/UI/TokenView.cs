@@ -8,11 +8,11 @@ namespace Wizard.UI
 {
     public sealed class TokenView : FrameView
     {
-        public TokenView(ILLM llm)
+        public TokenView(ILLM[] llms)
         {
             Title = "TOKEN/CACHE USAGE";
 
-            TokenTable table = new(llm);
+            TokenTable table = new(llms);
 
             TableView infoTable = new(table)
             {
@@ -58,22 +58,25 @@ namespace Wizard.UI
 
             int maxValue = 1;
 
-            llm.TokenUsage += (input, output, cached) =>
+            foreach (ILLM llm in llms)
             {
-                bars.AddBars("", new Rune(' '), [input, output, cached]);
-
-                int barMax = Math.Max(input, Math.Max(output, cached));
-                if (barMax > maxValue)
+                llm.TokenUsage += (input, output, cached) =>
                 {
-                    maxValue = barMax;
-                    int graphHeight         = (int)(tokenGraph.Viewport.Height - tokenGraph.MarginBottom);
-                    float cellHeight        = graphHeight > 0 ? (float)maxValue / graphHeight : maxValue;
-                    tokenGraph.CellSize     = new(tokenGraph.CellSize.X, cellHeight);
-                    tokenGraph.AxisY.Increment = cellHeight * (graphHeight / 4f);
-                }
+                    bars.AddBars("", new Rune(' '), [input, output, cached]);
 
-                App?.Invoke(tokenGraph.SetNeedsDraw);
-            };
+                    int barMax = Math.Max(input, Math.Max(output, cached));
+                    if (barMax > maxValue)
+                    {
+                        maxValue = barMax;
+                        int graphHeight            = (int)(tokenGraph.Viewport.Height - tokenGraph.MarginBottom);
+                        float cellHeight           = graphHeight > 0 ? (float)maxValue / graphHeight : maxValue;
+                        tokenGraph.CellSize        = new(tokenGraph.CellSize.X, cellHeight);
+                        tokenGraph.AxisY.Increment = cellHeight * (graphHeight / 4f);
+                    }
+
+                    App?.Invoke(tokenGraph.SetNeedsDraw);
+                };
+            }
         }
 
         private sealed class TokenTable : ITableSource
@@ -84,16 +87,19 @@ namespace Wizard.UI
             int outputRun = 0;
             int cachedRun = 0;
 
-            public TokenTable(ILLM llm)
+            public TokenTable(ILLM[] llms)
             {
-                llm.TokenUsage += (input, output, cached) =>
+                foreach (ILLM llm in llms)
                 {
-                    inputRun  += input;
-                    outputRun += output;
-                    cachedRun += cached;
+                    llm.TokenUsage += (input, output, cached) =>
+                    {
+                        inputRun  += input;
+                        outputRun += output;
+                        cachedRun += cached;
 
-                    Updated?.Invoke();
-                };
+                        Updated?.Invoke();
+                    };
+                }
             }
 
             public object this[int row, int col]

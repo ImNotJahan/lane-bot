@@ -9,11 +9,15 @@ namespace Wizard.UI
         {
             Title = "CONFIG";
 
-            string llm, body, ear, mouth;
+            string responder, router, monologuer, summarizer, body, ear, mouth;
 
 
-            llm   = "hi";//Settings.instance.LLM;
-            body  = Settings.instance?.Body ?? "Terminal";
+            responder  = Settings.instance?.LLMs.Respond   .Model ?? Program.DEFAULT_MODEL;
+            router     = Settings.instance?.LLMs.Routing   .Model ?? Program.DEFAULT_MODEL;
+            monologuer = Settings.instance?.LLMs.Monologue .Model ?? Program.DEFAULT_MODEL;
+            summarizer = Settings.instance?.LLMs.Summarize?.Model ?? Program.DEFAULT_MODEL;
+
+            body  = Settings.instance?.Body           ?? "Terminal";
             ear   = Settings.instance?.Hearing?.Ear   ?? "N/A";
             mouth = Settings.instance?.Speech ?.Mouth ?? "N/A";
 
@@ -21,7 +25,15 @@ namespace Wizard.UI
             {
                 X = Y = 0,
 
-                Text = $"LLM:   {llm} \nBODY:  {body}\nEAR:   {ear}\nMOUTH: {mouth}"
+                Text = $"""
+RESPONDER:  {responder}
+ROUTER:     {router}
+MONOLOGUER: {monologuer}
+SUMMARIZER: {summarizer}
+BODY:       {body}
+EAR:        {ear}
+MOUTH:      {mouth}
+"""
             };
 
             Add(configLabel);
