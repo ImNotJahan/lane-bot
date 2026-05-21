@@ -330,13 +330,18 @@ namespace Wizard.Head
                     ? string.Join("\n", availableBooks.Select(b => $"- {b}"))
                     : "(none)";
 
+                string searchContext = Settings.instance?.Search is not null
+                    ? "available"
+                    : "unavailable";
+
                 string cachedDynamicPrompt = string.Format(Prompts.GetPrompt("Monologue_Memory"), memoryContext);
                 string dynamicPrompt       = string.Format(
                     Prompts.GetPrompt("Monologue_Dynamic"),
                     conversationContext,
                     MessageContainer.FormatTime(DateTime.UtcNow, false),
                     thoughtContext,
-                    booksContext
+                    booksContext,
+                    searchContext
                 );
 
                 Logger.LogTrace("Monologuing with dynamic prompt: " + dynamicPrompt);
@@ -393,6 +398,52 @@ namespace Wizard.Head
                         // trigger another monologue immediately to react to what was just read
                         timeUntilThought = Settings.instance?.Books?.ReadThoughtInterval ?? 60;
                     }
+                }
+
+                string? searchQuery = (string?) data["search"];
+                if(!string.IsNullOrWhiteSpace(searchQuery))
+                {
+                    Logger.LogInformation("[Searching: {0}]", searchQuery);
+
+                    string results = await BraveSearch.Search(searchQuery);
+
+                    Logger.LogDebug("[Search results for: {0}]\n{1}", searchQuery, results);
+
+                    MessageContainer searchResult = new(
+                        $"[Search: {searchQuery}]\n{results}",
+                        Author.Bot,
+                        MessageType.Text,
+                        DateTime.UtcNow
+                    );
+
+                    await RememberMessage(searchResult);
+
+                    lastThought = searchResult;
+
+                    timeUntilThought = Settings.instance?.Search?.SearchThoughtInterval ?? 10;
+                }
+
+                string? fetchUrl = (string?) data["fetch"];
+                if(!string.IsNullOrWhiteSpace(fetchUrl))
+                {
+                    Logger.LogInformation("[Fetching: {0}]", fetchUrl);
+
+                    string content = await BraveSearch.FetchUrl(fetchUrl);
+
+                    Logger.LogDebug("[Fetch result for: {0}]\n{1}", fetchUrl, content);
+
+                    MessageContainer fetchResult = new(
+                        $"[Fetched: {fetchUrl}]\n{content}",
+                        Author.Bot,
+                        MessageType.Text,
+                        DateTime.UtcNow
+                    );
+
+                    await RememberMessage(fetchResult);
+
+                    lastThought = fetchResult;
+
+                    timeUntilThought = Settings.instance?.Search?.SearchThoughtInterval ?? 10;
                 }
 
                 string thought = (string?) data["thought"]

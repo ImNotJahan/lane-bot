@@ -16,6 +16,7 @@ namespace Wizard.Utility
         public          HearingSettings?  Hearing               { get; set; }
         public          FaceSettings?     Face                  { get; set; }
         public          BookSettings?     Books                 { get; set; }
+        public          SearchSettings?   Search                { get; set; }
     }
 
     public sealed class HandlerSettings
@@ -66,6 +67,11 @@ namespace Wizard.Utility
     {
         public required string[] Available           { get; set; }
         public required int      ReadThoughtInterval { get; set; }
+    }
+
+    public sealed class SearchSettings
+    {
+        public required int SearchThoughtInterval { get; set; }
     }
 
     public sealed class LLMsSettings

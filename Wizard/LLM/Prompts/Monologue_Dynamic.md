@@ -10,3 +10,5 @@ Current time: {1}
 
 Available books to read:
 {3}
+
+Web search: {4}

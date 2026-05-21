@@ -27,6 +27,7 @@ Score 0.0 if:
 - The message is clearly not directed at Lane
 - The message is empty, meaningless, or a duplicate
 - The message seems unfinished
+- The message asks about something Lane would need to search the web for before answering
 
 DO NOT list any reasoning. Only reply with JSON in this exact format, no other text:
 {"enthusiasm": 0.7, "emoticon": ":3"}
