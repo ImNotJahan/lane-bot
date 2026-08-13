@@ -50,6 +50,13 @@ public interface IKeyValueStore
     ValueTask SetAsync<T>(ScopeKey scope, string key, T value, CancellationToken ct);
 
     ValueTask RemoveAsync(ScopeKey scope, string key, CancellationToken ct);
+
+    /// <summary>
+    /// Keys under a prefix, ordered. What lets a tool own a whole family of keys —
+    /// <c>note:*</c> — without a table of its own, and without keeping a second index key
+    /// that can disagree with what is actually stored.
+    /// </summary>
+    ValueTask<IReadOnlyList<string>> ListKeysAsync(ScopeKey scope, string prefix, CancellationToken ct);
 }
 
 /// <summary>Used until a real store is configured, and by tests that do not care about durability.</summary>

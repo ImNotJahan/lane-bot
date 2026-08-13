@@ -24,7 +24,7 @@ everything globally while still replying only where she was addressed.
 | `Lane.Providers` | Anthropic and OpenAI-compatible (OpenRouter, DeepSeek, any compatible endpoint) adapters. |
 | `Lane.Audio` | Ported DSP, continuous recognition, streaming synthesis, the audio router and the voice floor. |
 | `Lane.Memory` | SQLite state / transcript / key-value stores, the sliding-window, summary and profile handlers, the flush and maintenance service. |
-| `Lane.Tools` | The built-in abilities: `web_search`, `fetch_url`, `read_book`, `list_books`, `set_emoticon`. |
+| `Lane.Tools` | The built-in abilities: `web_search`, `fetch_url`, `read_book`, `list_books`, `set_emoticon`, and the scratchpad (`write_note`, `read_note`, `list_notes`, `delete_note`). |
 | `Lane.Tools.Mcp` | The MCP client: one supervised connection per configured server, its tools namespaced and sanitised. |
 | `Lane.Surfaces.Discord` | One Discord bot per configured instance: sessions, mentions, replies, attachments. |
 | `Lane.Surfaces.Terminal` | The keyboard as a surface. |
@@ -36,7 +36,7 @@ everything globally while still replying only where she was addressed.
 ## Running
 
 ```bash
-dotnet test  Lane.Tests/Lane.Tests.csproj      # 364 tests, no network
+dotnet test  Lane.Tests/Lane.Tests.csproj      # 377 tests, no network
 dotnet run --project Lane.Host                 # dashboard, if stdout is a terminal
 dotnet run --project Lane.Host -- --no-tui     # plain stdin/stdout
 dotnet run --project Lane.Host -- migrate --data <v2 data.json> --dry-run
@@ -482,6 +482,18 @@ dominates its embedding is *style*, so similarity search mostly recovered who wa
 rather than what about. The unit that works is a self-contained statement — "Jahan keeps a
 cuttlefish called Marlow" means something without the conversation around it, and a profile
 of a dozen such facts costs almost nothing to carry in the cached block every turn.
+
+**The scratchpad is the memory she writes on purpose.** Handlers decide what Lane carries;
+`write_note` is the one store she chooses the contents of, and it survives the sliding
+window, the summariser and a restart untouched. It is `IKeyValueStore` under `note:`, at
+global scope like book positions — writing in one conversation and reading in the next, or
+during the monologue, is the entire point, so scoping notes per session would remove it. A
+title is matched case- and whitespace-insensitively, because she will not write it back
+character for character and "no such note" over a capital letter is worse than no
+scratchpad. Notes are capped at 64 × 4000 characters and an overlong write is **refused
+rather than truncated** — a note silently cut in half is one she reads back later and acts
+on as though it were whole — which is why `delete_note` exists: a scratchpad that fills up
+and then refuses everything new is the state a scratchpad is for avoiding.
 
 Vector search is deliberately **not** built. A rolling summary plus a small profile covers
 most of what "she remembers me" means; retrieval earns its place once history outgrows what

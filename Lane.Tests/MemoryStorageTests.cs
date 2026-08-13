@@ -303,4 +303,39 @@ public sealed class SqliteStoreTests
         await store.RemoveAsync(global, "book:sisyphus", default);
         Assert.Equal(0, await store.GetAsync<int>(global, "book:sisyphus", default));
     }
+
+    [Fact]
+    public async Task Keys_can_be_listed_by_prefix_within_one_scope()
+    {
+        SqliteKeyValueStore store = new(InMemory());
+
+        ScopeKey global  = new("global");
+        ScopeKey session = new("session:x");
+
+        await store.SetAsync(global, "note:tide pools", "a", default);
+        await store.SetAsync(global, "note:marlow", "b", default);
+        await store.SetAsync(global, "book:sisyphus", 12, default);
+        await store.SetAsync(session, "note:elsewhere", "c", default);
+
+        Assert.Equal(["note:marlow", "note:tide pools"],
+            await store.ListKeysAsync(global, "note:", default));
+
+        Assert.Empty(await store.ListKeysAsync(global, "nothing:", default));
+    }
+
+    [Fact]
+    public async Task A_prefix_is_a_literal_rather_than_a_pattern()
+    {
+        // '%' and '_' are LIKE wildcards; a prefix containing one must still match itself,
+        // or a caller's key fragment silently becomes a wildcard over every other key.
+        SqliteKeyValueStore store = new(InMemory());
+
+        ScopeKey global = new("global");
+
+        await store.SetAsync(global, "50%:kept", "a", default);
+        await store.SetAsync(global, "50x:other", "b", default);
+
+        Assert.Equal(["50%:kept"], await store.ListKeysAsync(global, "50%", default));
+        Assert.Empty(await store.ListKeysAsync(global, "5_x", default));
+    }
 }

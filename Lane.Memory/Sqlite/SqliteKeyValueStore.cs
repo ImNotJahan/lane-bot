@@ -53,6 +53,34 @@ public sealed class SqliteKeyValueStore(LaneDatabase database) : IKeyValueStore
         await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
+    public async ValueTask<IReadOnlyList<string>> ListKeysAsync(ScopeKey scope, string prefix, CancellationToken ct)
+    {
+        await using SqliteConnection connection = database.Open();
+        await using SqliteCommand command = connection.CreateCommand();
+
+        command.CommandText =
+            """
+            SELECT key FROM kv WHERE scope_key = $s AND key LIKE $p ESCAPE '\' ORDER BY key
+            """;
+
+        // A prefix is a literal, not a pattern: '%' or '_' in one must match themselves,
+        // or a caller's key fragment silently becomes a wildcard over everything else.
+        string pattern = prefix.Replace("\\", "\\\\")
+                               .Replace("%", "\\%")
+                               .Replace("_", "\\_") + "%";
+
+        command.Parameters.AddWithValue("$s", scope.Value);
+        command.Parameters.AddWithValue("$p", pattern);
+
+        List<string> keys = [];
+
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
+
+        while (await reader.ReadAsync(ct).ConfigureAwait(false)) keys.Add(reader.GetString(0));
+
+        return keys;
+    }
+
     public async ValueTask RemoveAsync(ScopeKey scope, string key, CancellationToken ct)
     {
         await using SqliteConnection connection = database.Open();

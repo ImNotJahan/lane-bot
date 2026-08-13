@@ -3,6 +3,7 @@ using Lane.Core.Memory;
 using Lane.Core.Presence;
 using Lane.Core.Tools;
 using Lane.Memory.Sqlite;
+using Lane.Tools.Notes;
 using Lane.Tools.Presence;
 using Lane.Tools.Reading;
 using Lane.Tools.Web;
@@ -108,6 +109,174 @@ public sealed class BuiltinToolTests : IDisposable
 
         Assert.Contains("sisyphus", result.Text);
         Assert.Contains("wired", result.Text);
+    }
+
+    // ---- scratchpad --------------------------------------------------------
+
+    [Fact]
+    public async Task A_note_survives_to_be_read_back()
+    {
+        IKeyValueStore store = Positions();
+
+        ITool write = new WriteNoteTool(store, NullLogger<WriteNoteTool>.Instance);
+        ITool read  = new ReadNoteTool(store);
+
+        await Invoke(write, new { title = "Marlow", text = "Jahan's cuttlefish." });
+
+        Assert.Equal("Jahan's cuttlefish.", (await Invoke(read, new { title = "Marlow" })).Text);
+    }
+
+    [Fact]
+    public async Task A_title_is_matched_however_it_was_capitalised_or_spaced()
+    {
+        // She will not write the title back character for character, and a scratchpad that
+        // answers "no such note" to a capital letter is worse than no scratchpad.
+        IKeyValueStore store = Positions();
+
+        ITool write = new WriteNoteTool(store, NullLogger<WriteNoteTool>.Instance);
+        ITool read  = new ReadNoteTool(store);
+
+        await Invoke(write, new { title = "Tide Pools", text = "Rocky shore habitats." });
+
+        Assert.Equal("Rocky shore habitats.", (await Invoke(read, new { title = "  tide   pools " })).Text);
+    }
+
+    [Fact]
+    public async Task Writing_a_title_again_replaces_it_unless_appending()
+    {
+        IKeyValueStore store = Positions();
+
+        ITool write = new WriteNoteTool(store, NullLogger<WriteNoteTool>.Instance);
+        ITool read  = new ReadNoteTool(store);
+
+        await Invoke(write, new { title = "plan", text = "one" });
+        await Invoke(write, new { title = "plan", text = "two" });
+
+        Assert.Equal("two", (await Invoke(read, new { title = "plan" })).Text);
+
+        await Invoke(write, new { title = "plan", text = "three", append = true });
+
+        Assert.Equal("two\nthree", (await Invoke(read, new { title = "plan" })).Text);
+    }
+
+    [Fact]
+    public async Task Appending_past_the_size_limit_is_refused_rather_than_truncated()
+    {
+        // A note silently cut in half is one she reads back later and acts on as whole.
+        IKeyValueStore store = Positions();
+
+        ITool write = new WriteNoteTool(store, NullLogger<WriteNoteTool>.Instance);
+        ITool read  = new ReadNoteTool(store);
+
+        await Invoke(write, new { title = "long", text = new string('x', 3990) });
+
+        ToolResult result = await Invoke(write, new { title = "long", text = new string('y', 100), append = true });
+
+        Assert.True(result.IsError);
+        Assert.Equal(new string('x', 3990), (await Invoke(read, new { title = "long" })).Text);
+    }
+
+    [Fact]
+    public async Task Reading_a_note_that_was_never_written_says_so()
+    {
+        ToolResult result = await Invoke(new ReadNoteTool(Positions()), new { title = "nothing" });
+
+        Assert.True(result.IsError);
+        Assert.Contains("list_notes", result.Text);
+    }
+
+    [Fact]
+    public async Task An_untitled_note_is_refused()
+    {
+        IKeyValueStore store = Positions();
+
+        ITool write = new WriteNoteTool(store, NullLogger<WriteNoteTool>.Instance);
+
+        Assert.True((await Invoke(write, new { title = "   ", text = "something" })).IsError);
+        Assert.True((await Invoke(write, new { title = "ok", text = "  " })).IsError);
+
+        Assert.Equal("(nothing on your scratchpad)", (await Invoke(new ListNotesTool(store), new { })).Text);
+    }
+
+    [Fact]
+    public async Task Listing_shows_the_most_recently_written_first()
+    {
+        IKeyValueStore store = Positions();
+
+        ITool write = new WriteNoteTool(store, NullLogger<WriteNoteTool>.Instance);
+
+        await Invoke(write, new { title = "older", text = "first thing" });
+        await Invoke(write, new { title = "newer", text = "second thing\nand more" });
+
+        string listed = (await Invoke(new ListNotesTool(store), new { })).Text;
+
+        Assert.True(listed.IndexOf("newer", StringComparison.Ordinal)
+                  < listed.IndexOf("older", StringComparison.Ordinal));
+
+        // A preview, not the note: the list is read to choose what to read next.
+        Assert.Contains("second thing", listed);
+        Assert.DoesNotContain("and more", listed);
+    }
+
+    [Fact]
+    public async Task The_scratchpad_fills_up_and_can_be_emptied_again()
+    {
+        IKeyValueStore store = Positions();
+
+        ITool write  = new WriteNoteTool(store, NullLogger<WriteNoteTool>.Instance);
+        ITool delete = new DeleteNoteTool(store);
+
+        for (int i = 0; i < 64; i++) await Invoke(write, new { title = $"note {i}", text = "x" });
+
+        // Rewriting one she already has is not a new note, so the limit does not block it.
+        Assert.False((await Invoke(write, new { title = "note 3", text = "y" })).IsError);
+
+        ToolResult full = await Invoke(write, new { title = "one too many", text = "x" });
+
+        Assert.True(full.IsError);
+        Assert.Contains("delete_note", full.Text);
+
+        Assert.False((await Invoke(delete, new { title = "note 3" })).IsError);
+        Assert.False((await Invoke(write, new { title = "one too many", text = "x" })).IsError);
+    }
+
+    [Fact]
+    public async Task Deleting_a_note_that_is_not_there_is_an_error_not_a_shrug()
+    {
+        ToolResult result = await Invoke(new DeleteNoteTool(Positions()), new { title = "nothing" });
+
+        Assert.True(result.IsError);
+        Assert.Contains("no note", result.Text);
+    }
+
+    [Fact]
+    public async Task What_was_written_down_is_remembered_globally()
+    {
+        // Tool traffic is stripped from memory, so without the observation the fact that
+        // she wrote anything down is gone by the next turn.
+        IKeyValueStore store = Positions();
+
+        ToolResult result = await Invoke(
+            new WriteNoteTool(store, NullLogger<WriteNoteTool>.Instance),
+            new { title = "Marlow", text = "Jahan's cuttlefish." });
+
+        ToolObservation observation = Assert.Single(result.Observations);
+
+        Assert.Equal(MemoryScopeHint.Global, observation.Scope);
+        Assert.Contains("Jahan's cuttlefish.", observation.Text);
+    }
+
+    [Fact]
+    public async Task Notes_are_hers_rather_than_one_conversation_s()
+    {
+        // The point of a scratchpad is writing in one conversation and reading in the next,
+        // or during the monologue, which belongs to no conversation at all.
+        IKeyValueStore store = Positions();
+
+        await Invoke(new WriteNoteTool(store, NullLogger<WriteNoteTool>.Instance),
+            new { title = "Marlow", text = "Jahan's cuttlefish." });
+
+        Assert.Equal(["note:marlow"], await store.ListKeysAsync(new ScopeKey("global"), "note:", default));
     }
 
     // ---- presence ----------------------------------------------------------
