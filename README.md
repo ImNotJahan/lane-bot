@@ -57,7 +57,7 @@ Lane is a Discord/terminal chatbot designed to feel authentic and personality-dr
 
 ### 2. Configure your `.env` file
 
-Create a `.env` file in the root of the `Wizard` folder:
+Create a `.env` file in the root of the repository:
 
 ```env
 ANTHROPIC_API_KEY=         # Required if using Claude

@@ -1,0 +1,70 @@
+namespace Lane.Audio;
+
+/// <summary>
+/// Somewhere audio comes from.
+///
+/// The abstraction exists so recognition never learns what it is listening to. v2's ear
+/// took a Discord-specific stream type in its constructor, which meant a microphone that
+/// was not Discord could not be heard at all.
+/// </summary>
+public interface IAudioSource : IAsyncDisposable
+{
+    AudioSourceId Id { get; }
+
+    AudioFormat Format { get; }
+
+    /// <summary>A name for whoever is speaking, when the transport happens to know one.</summary>
+    string? SpeakerHint { get; }
+
+    IAsyncEnumerable<AudioFrame> ReadAsync(CancellationToken ct);
+}
+
+public sealed record Transcript(string Text, bool IsFinal, TimeSpan Offset, float? Confidence = null);
+
+/// <summary>
+/// Turns one audio source into words.
+///
+/// Continuous rather than one utterance at a time: recognising once per call drops
+/// whatever arrives between calls, and interim results — which barge-in depends on — never
+/// surface at all.
+/// </summary>
+public interface ISpeechRecognizer : IAsyncDisposable
+{
+    IAsyncEnumerable<Transcript> TranscribeAsync(IAudioSource source, CancellationToken ct);
+}
+
+public sealed record SpeechOptions(
+    string VoiceId,
+    float  Stability     = 0.84f,
+    float  Similarity    = 0.74f,
+    float  Tempo         = 25f,
+    float  Pitch         = -2.5f,
+    float  Rate          = 0f,
+    bool   TuneForSpeech = true,
+
+    /// <summary>What the listener wants back. Null means the synthesiser's own format.</summary>
+    AudioFormat? TargetFormat = null);
+
+/// <summary>
+/// Somewhere Lane's voice comes out.
+///
+/// Declared here rather than in the kernel because it speaks in <see cref="AudioFrame"/>,
+/// and Core deliberately knows nothing about audio. A session resolves it the same way it
+/// resolves text output — by capability lookup — so the kernel never needs the type.
+/// </summary>
+public interface IVoiceOutput
+{
+    /// <summary>What this channel wants to be handed. Synthesis converts to it.</summary>
+    AudioFormat Format { get; }
+
+    Task PlayAsync(IAsyncEnumerable<AudioFrame> audio, CancellationToken ct);
+
+    Task StopAsync();
+}
+
+public interface ISpeechSynthesizer
+{
+    AudioFormat NativeFormat { get; }
+
+    IAsyncEnumerable<AudioFrame> SynthesizeAsync(string text, SpeechOptions options, CancellationToken ct);
+}

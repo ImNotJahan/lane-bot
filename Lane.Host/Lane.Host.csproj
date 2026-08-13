@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Lane.Host</RootNamespace>
+    <AssemblyName>lane</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="DotNetEnv" Version="3.1.1" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.5" />
+    <PackageReference Include="Terminal.Gui" Version="2.0.0-develop.5213" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Lane.Core/Lane.Core.csproj" />
+    <ProjectReference Include="../Lane.Providers/Lane.Providers.csproj" />
+    <ProjectReference Include="../Lane.Audio/Lane.Audio.csproj" />
+    <ProjectReference Include="../Lane.Memory/Lane.Memory.csproj" />
+    <ProjectReference Include="../Lane.Tools/Lane.Tools.csproj" />
+    <ProjectReference Include="../Lane.Tools.Mcp/Lane.Tools.Mcp.csproj" />
+    <ProjectReference Include="../Lane.Surfaces.Discord/Lane.Surfaces.Discord.csproj" />
+    <ProjectReference Include="../Lane.Surfaces.Terminal/Lane.Surfaces.Terminal.csproj" />
+    <ProjectReference Include="../Lane.Surfaces.Api/Lane.Surfaces.Api.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="appsettings.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <!-- Optional local overrides, never committed. -->
+    <Content Include="appsettings.local.json" Condition="Exists('appsettings.local.json')">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Prompts/*.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="../Resources/Books/*.txt" LinkBase="Books">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+</Project>

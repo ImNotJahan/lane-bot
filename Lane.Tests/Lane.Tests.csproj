@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Lane.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit.v3" Version="3.1.0" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Lane.Core/Lane.Core.csproj" />
+    <ProjectReference Include="../Lane.Testing/Lane.Testing.csproj" />
+    <ProjectReference Include="../Lane.Providers/Lane.Providers.csproj" />
+    <ProjectReference Include="../Lane.Memory/Lane.Memory.csproj" />
+    <ProjectReference Include="../Lane.Tools/Lane.Tools.csproj" />
+    <ProjectReference Include="../Lane.Tools.Mcp/Lane.Tools.Mcp.csproj" />
+    <ProjectReference Include="../Lane.Audio/Lane.Audio.csproj" />
+    <ProjectReference Include="../Lane.Surfaces.Discord/Lane.Surfaces.Discord.csproj" />
+    <ProjectReference Include="../Lane.Surfaces.Api/Lane.Surfaces.Api.csproj" />
+    <ProjectReference Include="../Lane.Host/Lane.Host.csproj" />
+  </ItemGroup>
+
+</Project>
