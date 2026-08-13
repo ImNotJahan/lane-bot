@@ -36,10 +36,11 @@ everything globally while still replying only where she was addressed.
 ## Running
 
 ```bash
-dotnet test  Lane.Tests/Lane.Tests.csproj      # 329 tests, no network
+dotnet test  Lane.Tests/Lane.Tests.csproj      # 364 tests, no network
 dotnet run --project Lane.Host                 # dashboard, if stdout is a terminal
 dotnet run --project Lane.Host -- --no-tui     # plain stdin/stdout
 dotnet run --project Lane.Host -- migrate --data <v2 data.json> --dry-run
+dotnet run --project Lane.Host -- say "hello"  # speak one line and exit
 ```
 
 In a real terminal you get the dashboard. Piped or with `--no-tui` it falls back to a plain
@@ -49,8 +50,9 @@ read loop, with logs on stderr so the conversation on stdout stays clean
 
 Keys: `ANTHROPIC_API_KEY`, optionally `OPENROUTER_API_KEY`, `BRAVE_API_KEY`,
 `DISCORD_API_KEY` and `LANE_API_KEY` (one per API client app). A surface whose token is missing logs and is skipped; the rest still run.
-Voice is off by default and needs `AZURE_KEY`, `AZURE_REGION` and `ELEVENLABS_KEY`
-(`Lane:Audio:Enabled`, plus `Voice:AutoJoin` on a Discord surface).
+Voice is off by default and needs `AZURE_KEY`, `AZURE_REGION` and — unless she is speaking
+through flite — `ELEVENLABS_KEY` (`Lane:Audio:Enabled`, plus `Voice:AutoJoin` on a Discord
+surface).
 
 ## Talking to the API
 
@@ -412,6 +414,67 @@ configuration question.
 it into clauses, and each clause is synthesised and played while the next is still being
 written. The first clause is deliberately cut shorter than the rest — everything before she
 starts talking is dead air, and a listener cannot tell a long opening clause from a fault.
+
+**Her voice is a choice, and one of them needs nothing.** `Lane:Audio:Provider` selects
+between `elevenlabs` and `flite` — [festvox/flite](https://github.com/festvox/flite), the
+small local synthesiser Festival was cut down into. It is run as a child process rather than
+bound as a library: flite ships as C, and a P/Invoke would mean shipping a native build per
+platform for what is a fallback voice. The process costs a few milliseconds against
+synthesis that is roughly a hundred times faster than real time — a whole clause comes back
+in ~20 ms cold and under 10 ms warm, against 1.3–2.4 s to first audio through ElevenLabs.
+
+ElevenLabs sounds better and always will. What flite buys is that she still talks with no
+key, no network and no bill: a dead API, an unpaid account, a machine with no outbound route,
+or a test that is not allowed to reach the internet. Which is also why an unknown provider
+name throws at registration rather than falling back — silently reverting to the paid
+provider is the wrong direction to fail in, and finding out at the first clause means
+finding out mid-conversation.
+
+```jsonc
+{ "Provider": "flite",
+  "Flite": { "ExecutablePath": "flite", "Voice": "slt", "DurationStretch": 0 } }
+```
+
+The binary is not installed by the build (`brew install flite`, `apt install flite`). `Voice`
+left empty means flite's own default. **A voice flite does not have is refused rather than
+substituted**: flite ignores an unknown `-voice` silently — no message, exit 0, its default
+speaks instead — so a typo is not a failure, it is Lane sounding like somebody else, and
+that gets blamed on the setting being ignored rather than on the name being wrong. The name
+is checked against `flite -lv` once, before the first clause, and the error lists what this
+build actually has. Both synthesisers then go through one `SpeechShaper`, because the tempo and pitch
+chain is a large part of what makes the voice hers and a copy per provider is two voices as
+soon as one of them is touched. **The rate comes from each clip's WAV header, not from
+configuration**: flite's rate belongs to the voice — 8 kHz for the default diphone `kal`,
+16 kHz for the clustergen ones — so assuming either resamples the other by a factor of two,
+which is a chipmunk or a drawl depending on which way round. `Lane:Audio:Speech` is shared
+between providers and its defaults are tuned for ElevenLabs; flite wants its own tempo and
+pitch, or `DurationStretch`, which stretches during synthesis with the phonemes still in
+hand rather than stretching the finished waveform.
+
+**A voice is judged by ear, so `say` builds no host.** `lane say "…"` synthesises one line,
+plays it out of the local speakers and exits — no model key, no Discord token, no database,
+no dashboard. That matters because the thing being tested is a *feel*: tempo and pitch are
+settled by trying six values in a row, and a command that costs a full startup each time is
+one nobody runs twice.
+
+```bash
+lane say "Tide pools are full of things worth looking at."
+lane say "Same line, slower." --voice slt --stretch 1.2 --pitch -1
+lane say "Compare." --provider elevenlabs --out /tmp/lane.wav   # write instead of play
+```
+
+What it does share is the composition: the synthesiser comes out of `AddLaneAudio` reading
+the same configuration the running bot reads, so what you hear is what a channel hears —
+the flags are overrides on top of that, never a second code path. It reports what it used
+and how long synthesis took against the length of the clip, since a voice being *fast* is
+half of whether it is usable. All of that goes to stderr, following the same rule the
+headless read loop does.
+
+Playback is `SystemSpeaker`, an `IVoiceOutput` like any other, which hands a WAV to the
+platform's own player (`afplay`, `paplay`/`aplay`, PowerShell's `SoundPlayer`). NAudio only
+has output devices on Windows, and the alternative is a native audio dependency per platform
+to play a test clip. Being an `IVoiceOutput` rather than a helper inside the command means a
+desktop surface later gets local audio without any of this moving.
 
 **Long-term memory stores facts, not messages.** v2 embedded individual chat lines and
 searched with the latest one. A single message carries so little topical content that what

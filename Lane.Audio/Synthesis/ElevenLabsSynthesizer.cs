@@ -5,8 +5,6 @@ using ElevenLabs.TextToSpeech;
 using ElevenLabs.Voices;
 using Lane.Audio.Dsp;
 using Microsoft.Extensions.Logging;
-using NAudio.Wave;
-using NAudio.Wave.SampleProviders;
 
 namespace Lane.Audio.Synthesis;
 
@@ -27,7 +25,8 @@ public sealed class ElevenLabsOptions
 }
 
 /// <summary>
-/// Speech from ElevenLabs, shaped by the same SoundTouch chain v2 used.
+/// Speech from ElevenLabs, shaped by <see cref="SpeechShaper"/> — the same SoundTouch chain
+/// v2 used, and the same one every other synthesiser here goes through.
 ///
 /// The output format comes from the caller rather than being hardcoded to 48 kHz stereo,
 /// so a Discord channel and an API socket can want different things.
@@ -85,7 +84,7 @@ public sealed class ElevenLabsSynthesizer : ISpeechSynthesizer
 
         if (raw.Length == 0) yield break;
 
-        byte[] shaped = Shape(raw, options, target);
+        byte[] shaped = SpeechShaper.Shape(raw, NativeFormat, options, target);
 
         int frameBytes = Math.Max(target.BytesPerFrame, target.BytesFor(_options.FrameDuration));
 
@@ -95,37 +94,6 @@ public sealed class ElevenLabsSynthesizer : ISpeechSynthesizer
 
             yield return AudioFrame.Of(frame, target);
         }
-    }
-
-    /// <summary>Tempo, pitch, resample and channel-map, as in v2 — but to a format the caller chose.</summary>
-    private byte[] Shape(byte[] raw, SpeechOptions options, AudioFormat target)
-    {
-        RawSourceWaveStream source = new(
-            new MemoryStream(raw), new WaveFormat(NativeFormat.SampleRate, 16, NativeFormat.Channels));
-
-        ISampleProvider shaped = new SoundTouchSampleProvider(
-            source.ToSampleProvider(),
-            tempo: options.Tempo,
-            pitchSemiTones: options.Pitch,
-            rate: options.Rate,
-            tuneForSpeech: options.TuneForSpeech);
-
-        if (shaped.WaveFormat.SampleRate != target.SampleRate)
-            shaped = new WdlResamplingSampleProvider(shaped, target.SampleRate);
-
-        if (shaped.WaveFormat.Channels == 1 && target.Channels == 2)
-            shaped = new MonoToStereoSampleProvider(shaped);
-
-        IWaveProvider wave = shaped.ToWaveProvider16();
-
-        using MemoryStream output = new();
-
-        byte[] buffer = new byte[8192];
-        int read;
-
-        while ((read = wave.Read(buffer, 0, buffer.Length)) > 0) output.Write(buffer, 0, read);
-
-        return output.ToArray();
     }
 
     private async Task<Voice> ResolveVoiceAsync(string voiceId, CancellationToken ct)

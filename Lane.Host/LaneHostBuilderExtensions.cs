@@ -174,12 +174,23 @@ public static class LaneHostBuilderExtensions
         options.Recognition.Region = secrets.Resolve(section["Recognition:RegionRef"]) ?? options.Recognition.Region;
         options.Synthesis.ApiKey   = secrets.Resolve(section["Synthesis:KeyRef"]) ?? options.Synthesis.ApiKey;
 
-        if (string.IsNullOrWhiteSpace(options.Recognition.Key) ||
-            string.IsNullOrWhiteSpace(options.Synthesis.ApiKey))
+        // Throws on an unknown name, here rather than at the first clause.
+        SpeechProvider provider = options.ResolveProvider();
+
+        if (string.IsNullOrWhiteSpace(options.Recognition.Key))
         {
             throw new InvalidOperationException(
-                "Lane:Audio is enabled but a speech key is missing. Set Recognition:KeyRef, " +
-                "Recognition:RegionRef and Synthesis:KeyRef, or turn Audio off.");
+                "Lane:Audio is enabled but the recognition key is missing. Set Recognition:KeyRef " +
+                "and Recognition:RegionRef, or turn Audio off.");
+        }
+
+        // Only the provider that is actually going to speak has to be configured — flite
+        // runs locally and has no key at all, which is most of the reason it is here.
+        if (provider is SpeechProvider.ElevenLabs && string.IsNullOrWhiteSpace(options.Synthesis.ApiKey))
+        {
+            throw new InvalidOperationException(
+                "Lane:Audio:Provider is 'elevenlabs' but Synthesis:KeyRef resolved to nothing. Set it, " +
+                "switch Provider to 'flite', or turn Audio off.");
         }
 
         services.AddLaneAudio(options);

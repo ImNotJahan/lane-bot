@@ -1,8 +1,10 @@
 using Lane.Core.Identity;
 using Lane.Core.Memory;
 using Lane.Host;
+using Lane.Host.Configuration;
 using Lane.Host.Logging;
 using Lane.Host.Migration;
+using Lane.Host.Voice;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -11,6 +13,14 @@ using Microsoft.Extensions.Logging;
 // Secrets come from .env in development. Loaded before configuration binds so that
 // "env:NAME" references resolve.
 DotNetEnv.Env.TraversePath().Load();
+
+// `say` speaks one line and gets out, building no host at all: hearing what a tempo change
+// did should not need a model key, a Discord token or a database.
+if (args.FirstOrDefault() == "say")
+{
+    Environment.ExitCode = await SayCommand.RunAsync(args, CancellationToken.None);
+    return;
+}
 
 bool migrating = args.Contains("migrate");
 
@@ -24,12 +34,7 @@ BufferedLogSink logs = new();
 HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 
 builder.Configuration
-    // Anchored to the assembly directory, not the shell's cwd, so `dotnet run` from the
-    // repo root and a published binary behave the same.
-    .SetBasePath(AppContext.BaseDirectory)
-    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-    .AddJsonFile("appsettings.local.json", optional: true, reloadOnChange: true)
-    .AddEnvironmentVariables("LANE_")
+    .AddLaneSources()
     .AddCommandLine(args);
 
 builder.Logging.ClearProviders();
