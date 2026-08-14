@@ -13,17 +13,28 @@ namespace Lane.Core.Identity;
 /// The map is configuration rather than inference. Guessing that two accounts with the
 /// same display name are the same person would merge two people's memories, which is a
 /// worse failure than not linking them at all.
+///
+/// <paramref name="runtime"/> is the one other way in, and it is not inference either: a
+/// link made through <c>link_identity</c> is proof that one person holds both accounts,
+/// because the code has to be repeated from the second one. Configuration still wins where
+/// the two disagree — an operator's map is not something a conversation can edit.
 /// </summary>
 public sealed class IdentityResolver : IIdentityResolver
 {
     private readonly FrozenDictionary<string, string> _links;
+    private readonly FrozenSet<string>                _people;
+    private readonly IIdentityLinks?                  _runtime;
 
     /// <param name="identities">Global user id → the surface-local ids belonging to them,
     /// each written <c>surface:localId</c>.</param>
+    /// <param name="log">For reporting how much was linked at startup.</param>
+    /// <param name="runtime">Links agreed in conversation, if any durable store holds them.</param>
     public IdentityResolver(
         IReadOnlyDictionary<string, IReadOnlyList<string>> identities,
-        ILogger<IdentityResolver>? log = null)
+        ILogger<IdentityResolver>? log = null,
+        IIdentityLinks? runtime = null)
     {
+        _runtime = runtime;
         Dictionary<string, string> links = new(StringComparer.OrdinalIgnoreCase);
 
         foreach ((string globalId, IReadOnlyList<string> locals) in identities)
@@ -44,7 +55,8 @@ public sealed class IdentityResolver : IIdentityResolver
             }
         }
 
-        _links = links.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
+        _links  = links.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
+        _people = identities.Keys.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
         if (_links.Count > 0)
             log?.LogInformation("Linked {Count} identities across surfaces", _links.Count);
@@ -53,5 +65,10 @@ public sealed class IdentityResolver : IIdentityResolver
     public static IdentityResolver Empty { get; } = new(new Dictionary<string, IReadOnlyList<string>>());
 
     public Participant Resolve(ParticipantId id, string displayName) =>
-        new(id, displayName, _links.GetValueOrDefault(id.ToString()));
+        // Configuration first: an account an operator has already placed cannot be moved by
+        // anything agreed in a conversation.
+        new(id, displayName, _links.GetValueOrDefault(id.ToString()) ?? _runtime?.GlobalIdFor(id));
+
+    public bool IsPerson(string globalUserId) =>
+        _people.Contains(globalUserId) || _runtime?.IsPerson(globalUserId) == true;
 }

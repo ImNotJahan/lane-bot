@@ -41,4 +41,11 @@ public interface IIdentityResolver
 {
     /// <summary>Returns the participant with <c>GlobalUserId</c> populated where a mapping exists.</summary>
     Participant Resolve(ParticipantId id, string displayName);
+
+    /// <summary>
+    /// Whether a global id already belongs to somebody, configured or linked at runtime.
+    /// Asked before minting a new one: a mint that collided with a configured person would
+    /// silently pour a stranger's memory into theirs.
+    /// </summary>
+    bool IsPerson(string globalUserId);
 }

@@ -24,7 +24,7 @@ everything globally while still replying only where she was addressed.
 | `Lane.Providers` | Anthropic and OpenAI-compatible (OpenRouter, DeepSeek, any compatible endpoint) adapters. |
 | `Lane.Audio` | Ported DSP, continuous recognition, streaming synthesis, the audio router and the voice floor. |
 | `Lane.Memory` | SQLite state / transcript / key-value stores, the sliding-window, summary and profile handlers, the flush and maintenance service. |
-| `Lane.Tools` | The built-in abilities: `web_search`, `fetch_url`, `read_book`, `list_books`, `set_emoticon`, and the scratchpad (`write_note`, `read_note`, `list_notes`, `delete_note`). |
+| `Lane.Tools` | The built-in abilities: `web_search`, `fetch_url`, `read_book`, `list_books`, `set_emoticon`, `link_identity`, and the scratchpad (`write_note`, `read_note`, `list_notes`, `delete_note`). |
 | `Lane.Tools.Mcp` | The MCP client: one supervised connection per configured server, its tools namespaced and sanitised. |
 | `Lane.Surfaces.Discord` | One Discord bot per configured instance: sessions, mentions, replies, attachments. |
 | `Lane.Surfaces.Terminal` | The keyboard as a surface. |
@@ -36,7 +36,7 @@ everything globally while still replying only where she was addressed.
 ## Running
 
 ```bash
-dotnet test  Lane.Tests/Lane.Tests.csproj      # 377 tests, no network
+dotnet test  Lane.Tests/Lane.Tests.csproj      # 393 tests, no network
 dotnet run --project Lane.Host                 # dashboard, if stdout is a terminal
 dotnet run --project Lane.Host -- --no-tui     # plain stdin/stdout
 dotnet run --project Lane.Host -- migrate --data <v2 data.json> --dry-run
@@ -172,8 +172,9 @@ input misbehaves on one terminal but not another.
   boundaries instead of being rejected outright
 - Lane cannot ping `@everyone` or a role by happening to write the words
 - other bots are remembered but never answered, so two of them cannot loop
-- identities link across surfaces by configuration only — never guessed from a matching
-  display name, since merging two strangers' memories is worse than not linking at all
+- identities link across surfaces by configuration or by proof, never by a guess from a
+  matching display name, since merging two strangers' memories is worse than not linking at
+  all — see the note on `link_identity` below
 
 Verified live: `Discord surface discord.main ready as Lane` and `Terminal surface terminal
 ready` in one process, holding a terminal conversation while the gateway was connected,
@@ -482,6 +483,32 @@ dominates its embedding is *style*, so similarity search mostly recovered who wa
 rather than what about. The unit that works is a self-contained statement — "Jahan keeps a
 cuttlefish called Marlow" means something without the conversation around it, and a profile
 of a dozen such facts costs almost nothing to carry in the cached block every turn.
+
+**`link_identity` proves a link rather than asserting one.** Joining two accounts is the one
+thing that can merge two people's memories, which is why the configured map never guesses.
+A tool that let the model say "these two are the same person" would be that guess with extra
+steps — models are agreeable, and "it's me, I'm also Jahan on Discord" is a sentence anyone
+can type. So the tool takes no account name at all. Called bare it issues a code to whoever
+is speaking; called with a code it links the account speaking *now* to the one that code was
+issued to. Each half can only ever act on the participant actually in the turn, so the worst
+a model can do with it is offer a code to the person in front of it.
+
+The rest follows from where a code can be seen and what a link costs to undo. Both halves
+must happen in a one-to-one session, because a code read aloud in a channel is a code a
+bystander can claim onto their own account. Codes are single-use, expire in ten minutes, and
+are consumed even by a failed attempt. Two accounts that are *both* already people are
+refused rather than merged: memory is written under both ids by then and nothing here could
+unpick which half belonged to whom afterwards, so that stays an operator's decision. A new
+id is minted only when neither side has one, and it is checked against everyone who already
+exists — a mint that landed on a configured person would be the silent merge the whole design
+avoids. Configuration still wins over anything agreed in conversation, and runtime links are
+stored separately, so "who did an operator link" stays a different question from "who linked
+themselves". Links are read into memory at startup because `Resolve` is synchronous and runs
+for every message that arrives.
+
+What it does not do is move memory already written. A link takes effect from the next
+message; anything `User`-scoped that accumulated under the unlinked key stays there, and old
+transcript rows keep the global id they were written with.
 
 **The scratchpad is the memory she writes on purpose.** Handlers decide what Lane carries;
 `write_note` is the one store she chooses the contents of, and it survives the sliding

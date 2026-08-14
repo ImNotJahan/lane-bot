@@ -115,6 +115,11 @@ public static class LaneHostBuilderExtensions
     /// <summary>
     /// Links one person's accounts across surfaces, so User-scoped memory follows them from
     /// Discord to the terminal to the API rather than fragmenting per surface.
+    ///
+    /// Two sources, and they are not equals: the configured map below, and whatever
+    /// <c>link_identity</c> has proved in conversation. Registered whether or not anything
+    /// is configured, since the second source does not need the first — and started before
+    /// any surface, so the first message of a run resolves to the right person.
     /// </summary>
     private static void RegisterIdentities(IServiceCollection services, IConfigurationSection section)
     {
@@ -127,10 +132,14 @@ public static class LaneHostBuilderExtensions
             if (accounts.Length > 0) identities[person.Key] = accounts;
         }
 
-        if (identities.Count == 0) return;
+        services.AddSingleton<IdentityLinkStore>();
+        services.AddSingleton<IIdentityLinks>(sp => sp.GetRequiredService<IdentityLinkStore>());
+        services.AddHostedService(sp => sp.GetRequiredService<IdentityLinkStore>());
 
-        services.AddSingleton<IIdentityResolver>(sp =>
-            new IdentityResolver(identities, sp.GetService<ILogger<IdentityResolver>>()));
+        services.AddSingleton<IIdentityResolver>(sp => new IdentityResolver(
+            identities,
+            sp.GetService<ILogger<IdentityResolver>>(),
+            sp.GetRequiredService<IIdentityLinks>()));
     }
 
     private static void RegisterMonologue(IServiceCollection services, IConfigurationSection section)
