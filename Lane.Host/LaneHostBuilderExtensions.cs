@@ -58,6 +58,7 @@ public static class LaneHostBuilderExtensions
         builder.Services.AddLanePrompts(prompts);
 
         RegisterIdentities(builder.Services, section.GetSection("Identities"));
+        RegisterSessionDescriptions(builder.Services);
         RegisterMonologue(builder.Services, section.GetSection("Monologue"));
         RegisterFace(builder.Services, section.GetSection("Face"));
         RegisterAudio(builder.Services, section.GetSection("Audio"));
@@ -140,6 +141,18 @@ public static class LaneHostBuilderExtensions
             identities,
             sp.GetService<ILogger<IdentityResolver>>(),
             sp.GetRequiredService<IIdentityDirectory>()));
+    }
+
+    /// <summary>
+    /// What Lane has written about each conversation, read into memory at startup for the
+    /// same reason identity links are: it is wanted while a prompt is being built, on every
+    /// turn, and a store round-trip there buys nothing.
+    /// </summary>
+    private static void RegisterSessionDescriptions(IServiceCollection services)
+    {
+        services.AddSingleton<SessionDescriptions>();
+        services.AddSingleton<ISessionDescriptions>(sp => sp.GetRequiredService<SessionDescriptions>());
+        services.AddHostedService(sp => sp.GetRequiredService<SessionDescriptions>());
     }
 
     private static void RegisterMonologue(IServiceCollection services, IConfigurationSection section)

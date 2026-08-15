@@ -56,6 +56,7 @@ public sealed class ResponsePolicyStage(
     ILanguageModelRegistry models,
     IPromptLibrary prompts,
     ITranscriptFormatter formatter,
+    ISessionDescriptions descriptions,
     IOptions<ResponsePolicyOptions> options,
     IOptions<Lane.Core.Agent.AgentOptions> agent,
     ILogger<ResponsePolicyStage> log,
@@ -200,11 +201,38 @@ public sealed class ResponsePolicyStage(
 
     private string Instructions(TurnContext ctx)
     {
-        if (!prompts.Has(_options.Prompt)) return Fallback;
+        string description = Description(ctx);
+
+        // The description goes before the closing instruction rather than after it: what the
+        // classifier is being asked to do should still be the last thing it reads.
+        if (!prompts.Has(_options.Prompt)) return Fallback + description + FallbackClose;
 
         return prompts.Render(_options.Prompt,
             ("session", ctx.Descriptor.DisplayName),
+            ("description", description),
             ("transcript", Transcript(ctx)));
+    }
+
+    /// <summary>
+    /// What Lane has written down about this conversation, as context for whether to answer.
+    ///
+    /// "Everyone here speaks German" changes how a reply reads; "this channel is the D&amp;D
+    /// game and I am running it" changes whether there should be one at all — a line of
+    /// table talk aimed at nobody in particular is still hers to answer when she is running
+    /// the table. Without this the gate is the one part of the turn that cannot see any of
+    /// that, and it is the part that decides whether the rest happens.
+    ///
+    /// Written in the third person, unlike the copy the persona carries. This prompt talks
+    /// *about* Lane to a small classifier, and a note in her own voice dropped into it would
+    /// read as instructions to the classifier rather than as something she wrote. The
+    /// leading blank lines are part of the value so that a conversation she has said nothing
+    /// about leaves no gap in either the template or the fallback.
+    /// </summary>
+    private string Description(TurnContext ctx)
+    {
+        if (descriptions.For(ctx.Descriptor) is not { } description) return "";
+
+        return $"\n\nLane has written this down about {ctx.Descriptor.DisplayName}, for herself:\n\n{description}";
     }
 
     /// <summary>The conversation so far, so "was that meant for Lane" has something to go on.</summary>
@@ -222,7 +250,9 @@ public sealed class ResponsePolicyStage(
         "Score 0 when it is clearly not addressed to her, is meaningless, or is unfinished. " +
         "Score low but non-zero for small talk directed at the group. " +
         "Score high when she is addressed by name, or the topic is one she cares about. " +
-        "Also pick a short text emoticon for her reaction. Call the assess tool.";
+        "Also pick a short text emoticon for her reaction.";
+
+    private const string FallbackClose = "\n\nCall the assess tool.";
 
     private readonly record struct Verdict(float Enthusiasm, string Emoticon);
 }

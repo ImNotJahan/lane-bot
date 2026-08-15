@@ -125,6 +125,131 @@ public sealed class DiscordMappingTests
         Assert.Equal("plain", DiscordMapper.AppendReplyContext("plain", "alice", null));
     }
 
+    // ---- embeds ------------------------------------------------------------
+
+    [Fact]
+    public void An_embed_is_read_rather_than_ignored()
+    {
+        // Posting a link produces a message with no content at all: everything worth reading
+        // hangs off it as an embed, and unrendered Lane sees someone say nothing.
+        string rendered = DiscordMapper.RenderEmbed(new EmbedView
+        {
+            Provider    = "YouTube",
+            Title       = "Never Gonna Give You Up",
+            Url         = "https://youtu.be/dQw4w9WgXcQ",
+            AuthorName  = "Rick Astley",
+            AuthorUrl   = "https://youtube.com/@RickAstleyYT",
+            Description = "The official video."
+        });
+
+        Assert.Contains("[embed from YouTube]", rendered);
+        Assert.Contains("Never Gonna Give You Up", rendered);
+        Assert.Contains("https://youtu.be/dQw4w9WgXcQ", rendered);
+        Assert.Contains("by Rick Astley", rendered);
+        Assert.Contains("The official video.", rendered);
+    }
+
+    [Fact]
+    public void Embed_fields_are_read_as_the_table_they_are()
+    {
+        string rendered = DiscordMapper.RenderEmbed(new EmbedView
+        {
+            Title  = "Server status",
+            Fields = [new EmbedFieldView("Players", "3/10"), new EmbedFieldView("Map", "de_dust2")]
+        });
+
+        Assert.Contains("Players: 3/10", rendered);
+        Assert.Contains("Map: de_dust2", rendered);
+    }
+
+    [Fact]
+    public void An_embeds_links_and_pictures_stay_visible()
+    {
+        string rendered = DiscordMapper.RenderEmbed(new EmbedView
+        {
+            Title        = "Article",
+            Url          = "https://example.com/article",
+            ImageUrl     = "https://cdn.example.com/hero.png",
+            ThumbnailUrl = "https://cdn.example.com/thumb.jpg",
+            VideoUrl     = "https://cdn.example.com/clip.mp4"
+        });
+
+        Assert.Contains("https://example.com/article", rendered);
+        Assert.Contains("image: https://cdn.example.com/hero.png", rendered);
+        Assert.Contains("thumbnail: https://cdn.example.com/thumb.jpg", rendered);
+        Assert.Contains("video: https://cdn.example.com/clip.mp4", rendered);
+    }
+
+    [Fact]
+    public void An_embeds_picture_is_offered_to_her_eyes_and_not_only_as_a_link()
+    {
+        (Uri Url, string MediaType)? image = DiscordMapper.EmbedImage(new EmbedView
+        {
+            // Discord's cdn hangs a signature off the query string.
+            ImageUrl = "https://cdn.discordapp.com/attachments/1/2/hero.PNG?ex=abc&is=def"
+        });
+
+        Assert.NotNull(image);
+        Assert.Equal("image/png", image!.Value.MediaType);
+    }
+
+    [Fact]
+    public void The_full_picture_is_preferred_over_the_thumbnail_of_it()
+    {
+        (Uri Url, string MediaType)? image = DiscordMapper.EmbedImage(new EmbedView
+        {
+            ImageUrl     = "https://example.com/full.webp",
+            ThumbnailUrl = "https://example.com/small.jpg"
+        });
+
+        Assert.Equal("https://example.com/full.webp", image!.Value.Url.ToString());
+    }
+
+    [Fact]
+    public void A_picture_she_cannot_see_falls_back_to_the_thumbnail_then_to_nothing()
+    {
+        // Only the formats providers accept are worth sending; the url is still in the text.
+        (Uri Url, string MediaType)? fallback = DiscordMapper.EmbedImage(new EmbedView
+        {
+            ImageUrl     = "https://example.com/diagram.svg",
+            ThumbnailUrl = "https://example.com/small.gif"
+        });
+
+        Assert.Equal("image/gif", fallback!.Value.MediaType);
+
+        Assert.Null(DiscordMapper.EmbedImage(new EmbedView { ImageUrl = "https://example.com/page" }));
+    }
+
+    [Fact]
+    public void A_wall_of_embeds_is_capped_rather_than_pasted_whole()
+    {
+        // Discord allows ten per message, each up to 4096 characters of description.
+        List<EmbedView> many = [.. Enumerable.Range(0, 9).Select(i => new EmbedView { Title = $"Embed {i}" })];
+
+        string rendered = DiscordMapper.RenderEmbeds(many);
+
+        Assert.Contains("Embed 0", rendered);
+        Assert.DoesNotContain("Embed 8", rendered);
+        Assert.Contains("(+4 more embeds)", rendered);
+    }
+
+    [Fact]
+    public void A_long_embed_is_trimmed()
+    {
+        string rendered = DiscordMapper.RenderEmbed(new EmbedView { Description = new string('x', 5000) });
+
+        Assert.True(rendered.Length < 1000, $"embed was {rendered.Length}");
+        Assert.Contains("…", rendered);
+    }
+
+    [Fact]
+    public void An_embed_carrying_nothing_readable_is_left_out_entirely()
+    {
+        Assert.Equal("", DiscordMapper.RenderEmbed(new EmbedView()));
+        Assert.Equal("", DiscordMapper.RenderEmbeds([]));
+        Assert.Equal("", DiscordMapper.RenderEmbeds([new EmbedView()]));
+    }
+
     // ---- splitting ---------------------------------------------------------
 
     [Fact]

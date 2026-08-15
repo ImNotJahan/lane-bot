@@ -24,9 +24,9 @@ everything globally while still replying only where she was addressed.
 | `Lane.Providers` | Anthropic and OpenAI-compatible (OpenRouter, DeepSeek, any compatible endpoint) adapters. |
 | `Lane.Audio` | Ported DSP, continuous recognition, streaming synthesis, the audio router and the voice floor. |
 | `Lane.Memory` | SQLite state / transcript / key-value stores, the sliding-window, summary and profile handlers, the flush and maintenance service. |
-| `Lane.Tools` | The built-in abilities: `web_search`, `fetch_url`, `read_book`, `list_books`, `set_emoticon`, `link_identity`, `set_my_name`, and the scratchpad (`write_note`, `read_note`, `list_notes`, `delete_note`). |
+| `Lane.Tools` | The built-in abilities: `web_search`, `fetch_url`, `read_book`, `list_books`, `set_emoticon`, `link_identity`, `set_my_name`, `set_session_description`, and the scratchpad (`write_note`, `read_note`, `list_notes`, `delete_note`). |
 | `Lane.Tools.Mcp` | The MCP client: one supervised connection per configured server, its tools namespaced and sanitised. |
-| `Lane.Surfaces.Discord` | One Discord bot per configured instance: sessions, mentions, replies, attachments. |
+| `Lane.Surfaces.Discord` | One Discord bot per configured instance: sessions, mentions, replies, attachments, embeds. |
 | `Lane.Surfaces.Terminal` | The keyboard as a surface. |
 | `Lane.Surfaces.Api` | Lane over HTTP: per-client keys, sessions, streamed replies, an event feed and a voice socket. |
 | `Lane.Testing` | `ScriptedLanguageModel`, `RecordingChannel`, `LaneHarness` — the kernel runs fully offline. Also an executable, so `FakeMcpServer` can be launched as a real child process. |
@@ -541,6 +541,46 @@ scratchpad. Notes are capped at 64 × 4000 characters and an overlong write is *
 rather than truncated** — a note silently cut in half is one she reads back later and acts
 on as though it were whole — which is why `delete_note` exists: a scratchpad that fills up
 and then refuses everything new is the state a scratchpad is for avoiding.
+
+**`set_session_description` is the other half of that, for what she cannot afford to go and
+look up.** A note only exists when she thinks to read it, which is the wrong shape for
+"everyone here speaks German" or "this channel is the D&D game and I am running it" — those
+have to hold for every reply, including the first one after a restart, so they belong in the
+prompt rather than behind a tool call. One description per conversation, keyed by *memory
+group* rather than session id, so describing a Discord text channel also describes the voice
+channel beside it and what she remembers of a conversation cannot come apart from what she
+has written about it. Stored under one global scope with a `session-description:` prefix
+rather than under each session's own scope, because `ListKeysAsync` enumerates within a
+scope: per-session keys can be read one conversation at a time but never swept up at startup
+without already knowing every group that exists. Read into memory at startup, like identity
+links, since it is wanted while a prompt is being built on every turn.
+
+It is **folded into the persona block** rather than added as a block of its own — it belongs
+to the same slowly-changing prefix, and a separate block would spend one of the handful of
+cache breakpoints a provider allows on a sentence — and appended in code rather than rendered
+into the template, so a checkout with no template files keeps it and a conversation she has
+said nothing about adds nothing at all. The prompt labels it as something she wrote for
+herself, which is the honest framing: the text arrives from a conversation, by way of a model
+that was asked to write it, and it lands in the system prompt.
+
+**The routing gate carries it too**, in the third person and through a `{{description}}` slot
+in `Routing.md` rather than by appending, because in that prompt the last thing read should
+be the instruction to call `assess` — the fallback splits around it for the same reason.
+Otherwise the one part of the turn that could see nothing she had written about a conversation
+would be the part deciding whether the rest of the turn happens at all: "everyone here speaks
+German" only changes how a reply reads, but "this is the D&D game and I am running it" changes
+whether a line of table talk aimed at nobody in particular is hers to answer. The wording is
+about her rather than in her voice, since a first-person note dropped into a prompt that talks
+*about* Lane to a small classifier reads as instructions to the classifier. Cleaning removes control and
+Unicode format characters — newlines stay, since this is a paragraph rather than a name, but
+a run of blank lines that would push it far enough down to read as a section of its own does
+not — and it is capped at 500 characters, **refused rather than truncated**. What none of
+that can do is stop the description from *saying* anything in particular: someone in the
+conversation can talk her into writing a standing instruction to herself. The cap, the label,
+and the fact that she can be asked to erase it are the answer, not character stripping. The
+monologue is deliberately excluded even though it can see every session — a thought that
+quietly rewrote what Lane believes about a channel she is not in would be
+indistinguishable, from the inside, from having always believed it.
 
 Vector search is deliberately **not** built. A rolling summary plus a small profile covers
 most of what "she remembers me" means; retrieval earns its place once history outgrows what

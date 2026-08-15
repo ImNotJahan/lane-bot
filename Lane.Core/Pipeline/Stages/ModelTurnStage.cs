@@ -23,6 +23,7 @@ public sealed class ModelTurnStage(
     IEnumerable<IAgentObserverFactory> observerFactories,
     IPromptLibrary         prompts,
     ITranscriptFormatter   formatter,
+    ISessionDescriptions   descriptions,
     IServiceProvider       services,
     IOptions<AgentOptions> options,
     ILogger<ModelTurnStage> log) : ITurnStage
@@ -131,10 +132,39 @@ public sealed class ModelTurnStage(
         ctx.Incoming.LastOrDefault(m => m.Role == LaneRole.User)?.Author;
 
     /// <summary>
-    /// The persona template, filled with who and where. Falls back to the inline option
-    /// when no template file is present, so tests and a bare checkout still run.
+    /// The persona template, filled with who and where, plus whatever Lane has written down
+    /// about this particular conversation.
     /// </summary>
-    private string BuildPersona(TurnContext ctx)
+    private string BuildPersona(TurnContext ctx) => Persona(ctx) + Description(ctx);
+
+    /// <summary>
+    /// What <c>set_session_description</c> last wrote about this conversation.
+    ///
+    /// Folded into the persona block rather than added as a block of its own: it belongs to
+    /// the same slowly-changing prefix, and a separate block would spend one of the handful
+    /// of cache breakpoints a provider allows on a sentence. Appended in code rather than
+    /// rendered into the template so a checkout with no template files keeps it too — and so
+    /// that a conversation she has said nothing about adds nothing at all, rather than an
+    /// empty heading.
+    ///
+    /// It is labelled as her own note on purpose. The text arrives from a conversation, by
+    /// way of a model that was asked to write it, and it lands in the system prompt: saying
+    /// where it came from is the difference between a note she wrote and an instruction she
+    /// has no way to place.
+    /// </summary>
+    private string Description(TurnContext ctx)
+    {
+        if (descriptions.For(ctx.Descriptor) is not { } description) return "";
+
+        return $"\n\nYou have written this down about {ctx.Descriptor.DisplayName}, for yourself, " +
+               $"and can change it with set_session_description:\n\n{description}";
+    }
+
+    /// <summary>
+    /// Falls back to the inline option when no template file is present, so tests and a bare
+    /// checkout still run.
+    /// </summary>
+    private string Persona(TurnContext ctx)
     {
         // The fallback still gets the mood appended. Otherwise a checkout with no template
         // files silently loses the pitch of every reply, which is the sort of difference

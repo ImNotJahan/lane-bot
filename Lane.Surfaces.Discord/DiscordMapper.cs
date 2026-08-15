@@ -3,6 +3,32 @@ using Lane.Core.Sessions;
 
 namespace Lane.Surfaces.Discord;
 
+/// <summary>One row of an embed's field table.</summary>
+internal sealed record EmbedFieldView(string? Name, string? Value);
+
+/// <summary>
+/// A Discord embed reduced to the parts worth reading.
+///
+/// The gateway type carries layout with it — colours, widths, proxy urls — none of which
+/// mean anything to Lane, and depending on it would drag NetCord into the tests. This is
+/// what survives the trip.
+/// </summary>
+internal sealed record EmbedView
+{
+    public string? Title        { get; init; }
+    public string? Url          { get; init; }
+    public string? Description  { get; init; }
+    public string? AuthorName   { get; init; }
+    public string? AuthorUrl    { get; init; }
+    public string? Provider     { get; init; }
+    public string? Footer       { get; init; }
+    public string? ImageUrl     { get; init; }
+    public string? ThumbnailUrl { get; init; }
+    public string? VideoUrl     { get; init; }
+
+    public IReadOnlyList<EmbedFieldView> Fields { get; init; } = [];
+}
+
 /// <summary>
 /// The parts of the Discord surface that are pure text and identity work.
 ///
@@ -75,10 +101,155 @@ internal static class DiscordMapper
     {
         if (string.IsNullOrWhiteSpace(replyAuthor) || string.IsNullOrWhiteSpace(replyContent)) return content;
 
-        string quoted = replyContent.Length > 300 ? replyContent[..300] + "…" : replyContent;
-
-        return $"{content}\n\n(replying to {replyAuthor}: \"{quoted}\")";
+        return $"{content}\n\n(replying to {replyAuthor}: \"{Truncate(replyContent, QuoteLimit)}\")";
     }
+
+    // ---- embeds ------------------------------------------------------------
+
+    /// <summary>Embeds rendered per message. Discord allows ten; past a few it is spam.</summary>
+    public const int MaxEmbeds = 5;
+
+    private const int QuoteLimit      = 300;
+    private const int DescriptionLimit = 600;
+    private const int FieldValueLimit  = 200;
+    private const int MaxFields        = 10;
+
+    /// <summary>
+    /// Every embed on a message, as one readable block.
+    ///
+    /// A link someone dropped, a bot's answer, an article worth reading: all of it arrives
+    /// as structure hanging off an otherwise empty message. Unrendered, Lane sees people
+    /// posting nothing and replying to nothing.
+    /// </summary>
+    public static string RenderEmbeds(IReadOnlyList<EmbedView> embeds)
+    {
+        if (embeds.Count == 0) return "";
+
+        List<string> rendered = [];
+
+        foreach (EmbedView embed in embeds.Take(MaxEmbeds))
+        {
+            string block = RenderEmbed(embed);
+
+            if (block.Length > 0) rendered.Add(block);
+        }
+
+        if (rendered.Count == 0) return "";
+
+        int hidden = embeds.Count - MaxEmbeds;
+
+        if (hidden > 0) rendered.Add($"(+{hidden} more embed{(hidden == 1 ? "" : "s")})");
+
+        return string.Join("\n\n", rendered);
+    }
+
+    /// <summary>
+    /// One embed as the lines a person would take from the card.
+    ///
+    /// Links are kept beside the text they belong to rather than stripped: half of what an
+    /// embed is worth is the thing it points at.
+    /// </summary>
+    public static string RenderEmbed(EmbedView embed)
+    {
+        List<string> lines = [];
+
+        if (Linked(embed.Title, embed.Url) is { } title) lines.Add(title);
+
+        if (Linked(embed.AuthorName, embed.AuthorUrl) is { } author) lines.Add($"by {author}");
+
+        if (!string.IsNullOrWhiteSpace(embed.Description))
+            lines.Add(Truncate(embed.Description, DescriptionLimit));
+
+        foreach (EmbedFieldView field in embed.Fields.Take(MaxFields))
+        {
+            bool hasName  = !string.IsNullOrWhiteSpace(field.Name);
+            bool hasValue = !string.IsNullOrWhiteSpace(field.Value);
+
+            if (!hasName && !hasValue) continue;
+
+            string value = hasValue ? Truncate(field.Value!, FieldValueLimit) : "";
+
+            lines.Add(hasName ? $"{field.Name!.Trim()}: {value}".TrimEnd() : value);
+        }
+
+        if (embed.Fields.Count > MaxFields) lines.Add($"(+{embed.Fields.Count - MaxFields} more fields)");
+
+        if (!string.IsNullOrWhiteSpace(embed.Footer)) lines.Add(Truncate(embed.Footer, FieldValueLimit));
+
+        // The image is also handed over as an ImagePart where the url looks like one, but the
+        // link itself still belongs in the text: not every embed image is a format she can see.
+        if (Url(embed.ImageUrl) is { } image)         lines.Add($"image: {image}");
+        if (Url(embed.ThumbnailUrl) is { } thumbnail) lines.Add($"thumbnail: {thumbnail}");
+        if (Url(embed.VideoUrl) is { } video)         lines.Add($"video: {video}");
+
+        if (lines.Count == 0) return "";
+
+        string header = string.IsNullOrWhiteSpace(embed.Provider)
+            ? "[embed]"
+            : $"[embed from {embed.Provider.Trim()}]";
+
+        return $"{header}\n{string.Join('\n', lines)}";
+    }
+
+    /// <summary>
+    /// The picture an embed carries, where it is one Lane can actually look at.
+    ///
+    /// The full image is preferred over the thumbnail — they are usually the same picture,
+    /// and the thumbnail is the version too small to read anything off.
+    /// </summary>
+    public static (Uri Url, string MediaType)? EmbedImage(EmbedView embed)
+    {
+        foreach (string? candidate in new[] { embed.ImageUrl, embed.ThumbnailUrl })
+        {
+            if (Url(candidate) is not { } url) continue;
+            if (ImageTypeOf(url) is not { } type) continue;
+            if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? parsed)) continue;
+
+            return (parsed, type);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The media type a url names, or null when it names nothing she can see.
+    ///
+    /// Guessed from the path because an embed carries no content type — Discord's cdn hangs
+    /// a signature on the query string, so that has to come off first.
+    /// </summary>
+    public static string? ImageTypeOf(string url)
+    {
+        int query = url.IndexOfAny(['?', '#']);
+
+        ReadOnlySpan<char> path = query < 0 ? url : url.AsSpan(0, query);
+
+        int dot = path.LastIndexOf('.');
+        if (dot < 0) return null;
+
+        return path[(dot + 1)..].ToString().ToLowerInvariant() switch
+        {
+            "png"          => "image/png",
+            "jpg" or "jpeg" => "image/jpeg",
+            "gif"          => "image/gif",
+            "webp"         => "image/webp",
+            _              => null
+        };
+    }
+
+    private static string? Url(string? url) => string.IsNullOrWhiteSpace(url) ? null : url.Trim();
+
+    /// <summary>Text with its link beside it, whichever of the two there is.</summary>
+    private static string? Linked(string? text, string? url) =>
+        (string.IsNullOrWhiteSpace(text), Url(url)) switch
+        {
+            (false, { } link) => $"{text!.Trim()} ({link})",
+            (false, null)     => text!.Trim(),
+            (true, { } link)  => link,
+            _                 => null
+        };
+
+    private static string Truncate(string text, int limit) =>
+        text.Length > limit ? text[..limit].TrimEnd() + "…" : text;
 
     /// <summary>
     /// Breaks a reply into pieces Discord will accept, preferring paragraph then line then

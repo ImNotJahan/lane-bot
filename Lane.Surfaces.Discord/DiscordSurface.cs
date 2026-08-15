@@ -291,12 +291,19 @@ public sealed class DiscordSurface : ISurface
 
         string text = DiscordMapper.ResolveMentions(message.Content, users, roles);
 
+        IReadOnlyList<EmbedView> embeds = ToViews(message.Embeds);
+
+        // An embed is often the whole message — a posted link, a bot's answer — so the card
+        // is folded into the text rather than left as structure nobody reads.
+        if (DiscordMapper.RenderEmbeds(embeds) is { Length: > 0 } cards)
+            text = string.IsNullOrWhiteSpace(text) ? cards : $"{text}\n\n{cards}";
+
         text = DiscordMapper.AppendReplyContext(
             text,
             message.ReferencedMessage is { } replied
                 ? DiscordMapper.DisplayNameOf(replied.Author.GlobalName, replied.Author.Username)
                 : null,
-            message.ReferencedMessage?.Content);
+            message.ReferencedMessage is { } quoted ? WithEmbeds(quoted.Content, quoted.Embeds) : null);
 
         List<ContentPart> parts = [];
 
@@ -309,10 +316,51 @@ public sealed class DiscordSurface : ISurface
             parts.Add(new ImagePart(new Uri(attachment.Url), null, attachment.ContentType));
         }
 
+        foreach (EmbedView embed in embeds.Take(DiscordMapper.MaxEmbeds))
+        {
+            if (DiscordMapper.EmbedImage(embed) is not { } image) continue;
+
+            parts.Add(new ImagePart(image.Url, null, image.MediaType));
+        }
+
         // An image with no caption is still something worth reacting to.
         if (parts.Count == 0) parts.Add(new TextPart("(no text)"));
 
         return parts;
+    }
+
+    /// <summary>Drops the gateway's layout detail, keeping what a reader would take from the card.</summary>
+    private static IReadOnlyList<EmbedView> ToViews(IReadOnlyList<Embed>? embeds)
+    {
+        if (embeds is not { Count: > 0 }) return [];
+
+        return [.. embeds.Select(embed => new EmbedView
+        {
+            Title        = embed.Title,
+            Url          = embed.Url,
+            Description  = embed.Description,
+            AuthorName   = embed.Author?.Name,
+            AuthorUrl    = embed.Author?.Url,
+            Provider     = embed.Provider?.Name,
+            Footer       = embed.Footer?.Text,
+            ImageUrl     = embed.Image?.Url,
+            ThumbnailUrl = embed.Thumbnail?.Url,
+            VideoUrl     = embed.Video?.Url,
+
+            Fields = embed.Fields is { } fields
+                ? [.. fields.Select(field => new EmbedFieldView(field.Name, field.Value))]
+                : []
+        })];
+    }
+
+    /// <summary>A message as one string, so a quoted card is not quoted as nothing.</summary>
+    private static string WithEmbeds(string? content, IReadOnlyList<Embed>? embeds)
+    {
+        string cards = DiscordMapper.RenderEmbeds(ToViews(embeds));
+
+        if (cards.Length == 0) return content ?? "";
+
+        return string.IsNullOrWhiteSpace(content) ? cards : $"{content}\n\n{cards}";
     }
 
     private void Attach(SessionId session, ulong channelId)
