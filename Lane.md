@@ -24,7 +24,7 @@ everything globally while still replying only where she was addressed.
 | `Lane.Providers` | Anthropic and OpenAI-compatible (OpenRouter, DeepSeek, any compatible endpoint) adapters. |
 | `Lane.Audio` | Ported DSP, continuous recognition, streaming synthesis, the audio router and the voice floor. |
 | `Lane.Memory` | SQLite state / transcript / key-value stores, the sliding-window, summary and profile handlers, the flush and maintenance service. |
-| `Lane.Tools` | The built-in abilities: `web_search`, `fetch_url`, `read_book`, `list_books`, `set_emoticon`, `link_identity`, and the scratchpad (`write_note`, `read_note`, `list_notes`, `delete_note`). |
+| `Lane.Tools` | The built-in abilities: `web_search`, `fetch_url`, `read_book`, `list_books`, `set_emoticon`, `link_identity`, `set_my_name`, and the scratchpad (`write_note`, `read_note`, `list_notes`, `delete_note`). |
 | `Lane.Tools.Mcp` | The MCP client: one supervised connection per configured server, its tools namespaced and sanitised. |
 | `Lane.Surfaces.Discord` | One Discord bot per configured instance: sessions, mentions, replies, attachments. |
 | `Lane.Surfaces.Terminal` | The keyboard as a surface. |
@@ -36,7 +36,7 @@ everything globally while still replying only where she was addressed.
 ## Running
 
 ```bash
-dotnet test  Lane.Tests/Lane.Tests.csproj      # 393 tests, no network
+dotnet test  Lane.Tests/Lane.Tests.csproj      # 409 tests, no network
 dotnet run --project Lane.Host                 # dashboard, if stdout is a terminal
 dotnet run --project Lane.Host -- --no-tui     # plain stdin/stdout
 dotnet run --project Lane.Host -- migrate --data <v2 data.json> --dry-run
@@ -509,6 +509,26 @@ for every message that arrives.
 What it does not do is move memory already written. A link takes effect from the next
 message; anything `User`-scoped that accumulated under the unlinked key stays there, and old
 transcript rows keep the global id they were written with.
+
+**`set_my_name` renames the speaker, and only the speaker.** Someone asking to be called
+something else is an ordinary request, but a name is how the transcript says who spoke, so
+the tool takes no account to act on — the same rule as linking, for the same reason. It is
+stored against the *person* rather than the account, so a name chosen on Discord is the name
+in the terminal, and applied in `IdentityResolver` rather than at each call site, so one
+request covers attribution, the transcript, `list_sessions` and the dashboard at once. A
+surface keeps handing over whatever the account is called; the resolver has the last word.
+
+A chosen name is hostile input, because it becomes the literal `"{name}: "` prefix on every
+one of that person's turns. Newlines and control characters come out — a name with a newline
+in it makes one message read as two, the second in somebody else's voice — along with every
+Unicode **format** character. That last part is by category rather than by a list of the
+marks worth worrying about, because the list this codebase already had was incomplete: the
+left-to-right and right-to-left marks sit outside the override range `Lane.Tools.Mcp`
+enumerates, and went straight through until a test went looking. **`McpNaming.CleanDescription`
+still has that gap**, on text a third-party server wrote. Names are capped, cannot be Lane's
+own — her turns are deliberately unprefixed, so a second Lane makes the transcript ambiguous
+to her as much as to a reader — and cannot be one somebody else in the conversation already
+answers to, or one another person has already chosen.
 
 **The scratchpad is the memory she writes on purpose.** Handlers decide what Lane carries;
 `write_note` is the one store she chooses the contents of, and it survives the sliding

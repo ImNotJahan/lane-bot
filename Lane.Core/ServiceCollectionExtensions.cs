@@ -37,7 +37,7 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton<IEventBus, EventBus>();
         services.TryAddSingleton<IIdentityResolver>(IdentityResolver.Empty);
-        services.TryAddSingleton<IIdentityLinks>(NullIdentityLinks.Instance);
+        services.TryAddSingleton<IIdentityDirectory>(NullIdentityDirectory.Instance);
         services.TryAddSingleton<IPresenceSink, EventBusPresenceSink>();
         services.TryAddSingleton<ITranscriptFormatter, TranscriptFormatter>();
 

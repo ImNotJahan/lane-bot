@@ -18,21 +18,27 @@ namespace Lane.Core.Identity;
 /// link made through <c>link_identity</c> is proof that one person holds both accounts,
 /// because the code has to be repeated from the second one. Configuration still wins where
 /// the two disagree — an operator's map is not something a conversation can edit.
+///
+/// It also carries the name someone asked to be called. Applying it here rather than at
+/// each call site is what makes one request cover every place a name appears: speaker
+/// attribution in the prompt, the transcript, <c>list_sessions</c>, the dashboard. A surface
+/// keeps passing the name the account carries; this is the last word on it.
 /// </summary>
 public sealed class IdentityResolver : IIdentityResolver
 {
     private readonly FrozenDictionary<string, string> _links;
     private readonly FrozenSet<string>                _people;
-    private readonly IIdentityLinks?                  _runtime;
+    private readonly IIdentityDirectory?              _runtime;
 
     /// <param name="identities">Global user id → the surface-local ids belonging to them,
     /// each written <c>surface:localId</c>.</param>
     /// <param name="log">For reporting how much was linked at startup.</param>
-    /// <param name="runtime">Links agreed in conversation, if any durable store holds them.</param>
+    /// <param name="runtime">Links proved and names chosen in conversation, if a durable
+    /// store holds them.</param>
     public IdentityResolver(
         IReadOnlyDictionary<string, IReadOnlyList<string>> identities,
         ILogger<IdentityResolver>? log = null,
-        IIdentityLinks? runtime = null)
+        IIdentityDirectory? runtime = null)
     {
         _runtime = runtime;
         Dictionary<string, string> links = new(StringComparer.OrdinalIgnoreCase);
@@ -64,10 +70,18 @@ public sealed class IdentityResolver : IIdentityResolver
 
     public static IdentityResolver Empty { get; } = new(new Dictionary<string, IReadOnlyList<string>>());
 
-    public Participant Resolve(ParticipantId id, string displayName) =>
+    public Participant Resolve(ParticipantId id, string displayName)
+    {
         // Configuration first: an account an operator has already placed cannot be moved by
         // anything agreed in a conversation.
-        new(id, displayName, _links.GetValueOrDefault(id.ToString()) ?? _runtime?.GlobalIdFor(id));
+        string? globalId = _links.GetValueOrDefault(id.ToString()) ?? _runtime?.GlobalIdFor(id);
+
+        // Keyed on the person where there is one, so a name chosen on Discord is the name
+        // in the terminal too.
+        string? chosen = _runtime?.NameFor(globalId ?? id.ToString());
+
+        return new Participant(id, chosen ?? displayName, globalId);
+    }
 
     public bool IsPerson(string globalUserId) =>
         _people.Contains(globalUserId) || _runtime?.IsPerson(globalUserId) == true;

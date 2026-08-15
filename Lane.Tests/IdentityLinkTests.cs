@@ -25,13 +25,13 @@ public sealed class IdentityLinkTests
     private readonly LaneDatabase _database = new(
         new SqliteOptions { InMemory = true }, NullLogger<LaneDatabase>.Instance);
 
-    private IdentityLinkStore Links() =>
-        new(new SqliteKeyValueStore(_database), NullLogger<IdentityLinkStore>.Instance);
+    private IdentityDirectory Links() =>
+        new(new SqliteKeyValueStore(_database), NullLogger<IdentityDirectory>.Instance);
 
-    private static IdentityResolver Resolver(IIdentityLinks links, params (string Person, string[] Accounts)[] configured) =>
+    private static IdentityResolver Resolver(IIdentityDirectory links, params (string Person, string[] Accounts)[] configured) =>
         new(configured.ToDictionary(c => c.Person, c => (IReadOnlyList<string>)c.Accounts), null, links);
 
-    private static LinkIdentityTool Tool(IIdentityResolver resolver, IIdentityLinks links, TimeProvider? time = null) =>
+    private static LinkIdentityTool Tool(IIdentityResolver resolver, IIdentityDirectory links, TimeProvider? time = null) =>
         new(resolver, links, time ?? TimeProvider.System, NullLogger<LinkIdentityTool>.Instance);
 
     private static Participant Person(SurfaceId surface, string local, string name, IIdentityResolver resolver) =>
@@ -67,7 +67,7 @@ public sealed class IdentityLinkTests
     [Fact]
     public async Task Two_accounts_become_one_person_once_the_code_is_repeated_on_the_other()
     {
-        IdentityLinkStore links = Links();
+        IdentityDirectory links = Links();
         IdentityResolver  resolver = Resolver(links);
         LinkIdentityTool  tool = Tool(resolver, links);
 
@@ -98,7 +98,7 @@ public sealed class IdentityLinkTests
         // The property that makes the tool safe: neither half names an account, so a model
         // cannot link somebody who is not in front of it, however sure it is they are one
         // person. Claiming on the issuing account would be that hole.
-        IdentityLinkStore links = Links();
+        IdentityDirectory links = Links();
         IdentityResolver  resolver = Resolver(links);
         LinkIdentityTool  tool = Tool(resolver, links);
 
@@ -114,7 +114,7 @@ public sealed class IdentityLinkTests
     [Fact]
     public async Task A_code_works_once()
     {
-        IdentityLinkStore links = Links();
+        IdentityDirectory links = Links();
         IdentityResolver  resolver = Resolver(links);
         LinkIdentityTool  tool = Tool(resolver, links);
 
@@ -133,7 +133,7 @@ public sealed class IdentityLinkTests
     [Fact]
     public async Task A_code_nobody_issued_is_refused()
     {
-        IdentityLinkStore links = Links();
+        IdentityDirectory links = Links();
         IdentityResolver  resolver = Resolver(links);
 
         ToolResult result = await Invoke(Tool(resolver, links), new { code = "AAAA-2222" },
@@ -149,7 +149,7 @@ public sealed class IdentityLinkTests
         // code left on screen is not a standing invitation.
         TestClock clock = new(DateTimeOffset.UnixEpoch);
 
-        IdentityLinkStore links = Links();
+        IdentityDirectory links = Links();
         IdentityResolver  resolver = Resolver(links);
         LinkIdentityTool  tool = Tool(resolver, links, clock);
 
@@ -166,7 +166,7 @@ public sealed class IdentityLinkTests
     [Fact]
     public async Task A_code_is_read_back_however_it_was_retyped()
     {
-        IdentityLinkStore links = Links();
+        IdentityDirectory links = Links();
         IdentityResolver  resolver = Resolver(links);
         LinkIdentityTool  tool = Tool(resolver, links);
 
@@ -185,7 +185,7 @@ public sealed class IdentityLinkTests
     {
         // A code in a channel is a code anyone in that channel can claim on their own
         // account, which would attach a stranger to somebody else's memory.
-        IdentityLinkStore links = Links();
+        IdentityDirectory links = Links();
         IdentityResolver  resolver = Resolver(links);
 
         ToolResult result = await Invoke(Tool(resolver, links), new { },
@@ -202,7 +202,7 @@ public sealed class IdentityLinkTests
     {
         // Nobody is there to hold the other account during the monologue, and the gating is
         // what stops it being offered while she is thinking alone.
-        ToolDescriptor descriptor = Tool(IdentityResolver.Empty, NullIdentityLinks.Instance).Descriptor;
+        ToolDescriptor descriptor = Tool(IdentityResolver.Empty, NullIdentityDirectory.Instance).Descriptor;
 
         Assert.Equal(TurnKind.Respond, descriptor.Availability.AllowedTurns);
         Assert.True(descriptor.Availability.RequiresSession);
@@ -213,9 +213,9 @@ public sealed class IdentityLinkTests
     public async Task With_nothing_durable_behind_it_the_tool_refuses_rather_than_pretending()
     {
         // A link that is forgotten at the next restart splits the memory it was made to join.
-        IdentityResolver resolver = Resolver(NullIdentityLinks.Instance);
+        IdentityResolver resolver = Resolver(NullIdentityDirectory.Instance);
 
-        ToolResult result = await Invoke(Tool(resolver, NullIdentityLinks.Instance), new { },
+        ToolResult result = await Invoke(Tool(resolver, NullIdentityDirectory.Instance), new { },
             Context(Person(Terminal, "jahan", "jahan", resolver)));
 
         Assert.True(result.IsError);
@@ -228,7 +228,7 @@ public sealed class IdentityLinkTests
     {
         // The configured id is adopted rather than a new one minted, so an operator's map
         // stays the name for that person everywhere.
-        IdentityLinkStore links = Links();
+        IdentityDirectory links = Links();
         IdentityResolver  resolver = Resolver(links, ("jahan", ["terminal:jahan"]));
         LinkIdentityTool  tool = Tool(resolver, links);
 
@@ -244,7 +244,7 @@ public sealed class IdentityLinkTests
     {
         // Both have memory written under their own id by now, and nothing here could unpick
         // which half belonged to whom afterwards. That is an operator's decision.
-        IdentityLinkStore links = Links();
+        IdentityDirectory links = Links();
         IdentityResolver  resolver = Resolver(links,
             ("jahan",   ["terminal:jahan"]),
             ("someone", ["discord.main:999"]));
@@ -264,7 +264,7 @@ public sealed class IdentityLinkTests
     public async Task Configuration_wins_over_anything_agreed_in_conversation()
     {
         // An operator's map is not something a conversation can edit.
-        IdentityLinkStore links = Links();
+        IdentityDirectory links = Links();
 
         await links.LinkAsync("linked-1234", [new ParticipantId(Terminal, "jahan")], default);
 
@@ -278,7 +278,7 @@ public sealed class IdentityLinkTests
     {
         // The point of linking is memory that follows someone, so a link that evaporates
         // overnight would fragment exactly what it was made to join.
-        IdentityLinkStore links = Links();
+        IdentityDirectory links = Links();
         IdentityResolver  resolver = Resolver(links);
         LinkIdentityTool  tool = Tool(resolver, links);
 
@@ -288,7 +288,7 @@ public sealed class IdentityLinkTests
 
         string? before = Person(Discord, "2313", "Jahan", resolver).GlobalUserId;
 
-        IdentityLinkStore reloaded = Links();
+        IdentityDirectory reloaded = Links();
         await reloaded.StartAsync(default);
 
         IdentityResolver afterRestart = Resolver(reloaded);
@@ -300,7 +300,7 @@ public sealed class IdentityLinkTests
     [Fact]
     public async Task A_minted_id_is_readable_and_is_nobody_else()
     {
-        IdentityLinkStore links = Links();
+        IdentityDirectory links = Links();
         IdentityResolver  resolver = Resolver(links);
         LinkIdentityTool  tool = Tool(resolver, links);
 
@@ -321,7 +321,7 @@ public sealed class IdentityLinkTests
         // The consequence the tool exists for, at the seam where it happens: User-scoped
         // handlers key on StableKey, so the profile Lane keeps of someone on Discord and
         // the one she keeps of them in the terminal become one instance, not two.
-        IdentityLinkStore links = Links();
+        IdentityDirectory links = Links();
         IdentityResolver  resolver = Resolver(links);
         LinkIdentityTool  tool = Tool(resolver, links);
 

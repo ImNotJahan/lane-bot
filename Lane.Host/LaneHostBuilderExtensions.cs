@@ -132,14 +132,14 @@ public static class LaneHostBuilderExtensions
             if (accounts.Length > 0) identities[person.Key] = accounts;
         }
 
-        services.AddSingleton<IdentityLinkStore>();
-        services.AddSingleton<IIdentityLinks>(sp => sp.GetRequiredService<IdentityLinkStore>());
-        services.AddHostedService(sp => sp.GetRequiredService<IdentityLinkStore>());
+        services.AddSingleton<IdentityDirectory>();
+        services.AddSingleton<IIdentityDirectory>(sp => sp.GetRequiredService<IdentityDirectory>());
+        services.AddHostedService(sp => sp.GetRequiredService<IdentityDirectory>());
 
         services.AddSingleton<IIdentityResolver>(sp => new IdentityResolver(
             identities,
             sp.GetService<ILogger<IdentityResolver>>(),
-            sp.GetRequiredService<IIdentityLinks>()));
+            sp.GetRequiredService<IIdentityDirectory>()));
     }
 
     private static void RegisterMonologue(IServiceCollection services, IConfigurationSection section)

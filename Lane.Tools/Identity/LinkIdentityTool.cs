@@ -25,7 +25,7 @@ namespace Lane.Tools.Identity;
 [LaneTool]
 public sealed class LinkIdentityTool(
     IIdentityResolver resolver,
-    IIdentityLinks links,
+    IIdentityDirectory directory,
     TimeProvider time,
     ILogger<LinkIdentityTool> log) : Tool<LinkIdentityTool.Args>
 {
@@ -66,7 +66,7 @@ public sealed class LinkIdentityTool(
 
     protected override async ValueTask<ToolResult> InvokeAsync(Args args, ToolContext context, CancellationToken ct)
     {
-        if (!links.Durable)
+        if (!directory.Durable)
             return ToolResult.Error(
                 "Linking is not available — nothing here would remember it past a restart.");
 
@@ -138,7 +138,16 @@ public sealed class LinkIdentityTool(
 
         string globalId = issuerGlobal ?? claimantGlobal ?? Mint(claimant.DisplayName);
 
-        await links.LinkAsync(globalId, [claim.Account, claimant.Id], ct).ConfigureAwait(false);
+        await directory.LinkAsync(globalId, [claim.Account, claimant.Id], ct).ConfigureAwait(false);
+
+        // A name chosen before the link was stored against the account; carry it onto the
+        // person, or "call me Jax" quietly stops working the moment they link a second
+        // account. The claimant's wins, since that is the account they are speaking from.
+        string? chosen = directory.NameFor(claimant.StableKey)
+                      ?? directory.NameFor(issuerGlobal ?? claim.Account.ToString());
+
+        if (chosen is not null && directory.NameFor(globalId) is null)
+            await directory.SetNameAsync(globalId, chosen, ct).ConfigureAwait(false);
 
         log.LogInformation("Linked {A} and {B} as {GlobalId}", claim.Account, claimant.Id, globalId);
 
