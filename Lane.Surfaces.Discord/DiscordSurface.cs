@@ -4,11 +4,13 @@ using Lane.Core.Events;
 using Lane.Core.Identity;
 using Lane.Core.Kernel;
 using Lane.Core.Messages;
+using Lane.Core.Presence;
 using Lane.Core.Sessions;
 using Lane.Core.Surfaces;
 using Microsoft.Extensions.Logging;
 using NetCord;
 using NetCord.Gateway;
+using Lane.Surfaces.Discord.Presence;
 using Lane.Surfaces.Discord.Voice;
 
 namespace Lane.Surfaces.Discord;
@@ -43,6 +45,11 @@ public sealed class DiscordSurface : ISurface
 
     private readonly ConcurrentDictionary<ulong, DiscordVoiceConnection> _voiceConnections = new();
 
+    /// <summary>What this bot shows about itself, composed from one slot per source.</summary>
+    private readonly DiscordStatusPublisher _status;
+
+    private IDisposable? _presence;
+
     private CancellationTokenSource? _lifetime;
 
     public DiscordSurface(
@@ -74,6 +81,8 @@ public sealed class DiscordSurface : ISurface
                 Intents = GatewayIntents.AllNonPrivileged | GatewayIntents.MessageContent
             });
 
+        _status = new DiscordStatusPublisher(WriteStatusAsync, log);
+
         _client.MessageCreate    += OnMessageCreate;
         _client.Ready            += OnReady;
         _client.Disconnect       += OnDisconnect;
@@ -87,9 +96,41 @@ public sealed class DiscordSurface : ISurface
     {
         _lifetime = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
+        StartStatus(_lifetime.Token);
+
         await _client.StartAsync(cancellationToken: ct).ConfigureAwait(false);
 
         _log.LogInformation("Discord surface {Surface} connecting", Id);
+    }
+
+    /// <summary>
+    /// Wires whatever Lane shows about herself to the one line Discord gives a bot.
+    ///
+    /// Her face is the first thing on it, read off the event bus like every other observer —
+    /// the surface owns none of this and is told nothing directly. A mood she reached in
+    /// another conversation, on another surface or in her own monologue is still her mood,
+    /// so this deliberately does not filter by session: one person, one face.
+    /// </summary>
+    private void StartStatus(CancellationToken ct)
+    {
+        if (!_options.Status.Enabled) return;
+
+        _status.Start(ct);
+
+        _presence = _bus.Subscribe<PresenceChanged>(
+            change => _status.Set(DiscordStatusSlot.Face, change.Emoticon));
+    }
+
+    /// <summary>Sends the composed line to the gateway. An empty line clears the status.</summary>
+    private async Task WriteStatusAsync(string line, CancellationToken ct)
+    {
+        PresenceProperties presence = new(UserStatusType.Online);
+
+        if (line.Length > 0)
+            presence = presence.WithActivities(
+                [new UserActivityProperties("Custom Status", UserActivityType.Custom).WithState(line)]);
+
+        await _client.UpdatePresenceAsync(presence, cancellationToken: ct).ConfigureAwait(false);
     }
 
     private ValueTask OnReady(ReadyEventArgs args)
@@ -97,6 +138,10 @@ public sealed class DiscordSurface : ISurface
         _log.LogInformation("Discord surface {Surface} ready as {User}", Id, args.User.Username);
 
         _bus.Publish(new SurfaceStateChanged(Id, Connected: true, args.User.Username));
+
+        // Presence belongs to the gateway session, so a reconnect starts her blank-faced
+        // unless the line is sent again.
+        _status.Refresh();
 
         return default;
     }
@@ -300,6 +345,11 @@ public sealed class DiscordSurface : ISurface
     public async Task StopAsync(CancellationToken ct)
     {
         if (_lifetime is not null) await _lifetime.CancelAsync().ConfigureAwait(false);
+
+        _presence?.Dispose();
+        _presence = null;
+
+        await _status.DisposeAsync().ConfigureAwait(false);
 
         // Sessions are closed before their channels detach: closing drains whatever is
         // still queued, and a reply produced during that drain still needs somewhere to go.

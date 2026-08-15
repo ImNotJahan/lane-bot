@@ -49,6 +49,18 @@ public sealed class DiscordSurfaceOptions
     public bool ReplyInThread { get; set; } = true;
 
     public VoiceOptions Voice { get; set; } = new();
+
+    public StatusOptions Status { get; set; } = new();
+}
+
+public sealed class StatusOptions
+{
+    /// <summary>
+    /// Show Lane's status on this bot — her face for now, and whatever else is given a slot
+    /// on the line later. Per instance, like everything else here: two bots can look
+    /// different, or one of them can say nothing about itself at all.
+    /// </summary>
+    public bool Enabled { get; set; } = true;
 }
 
 public sealed class VoiceOptions

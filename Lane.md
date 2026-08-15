@@ -36,7 +36,7 @@ everything globally while still replying only where she was addressed.
 ## Running
 
 ```bash
-dotnet test  Lane.Tests/Lane.Tests.csproj      # 409 tests, no network
+dotnet test  Lane.Tests/Lane.Tests.csproj      # 419 tests, no network
 dotnet run --project Lane.Host                 # dashboard, if stdout is a terminal
 dotnet run --project Lane.Host -- --no-tui     # plain stdin/stdout
 dotnet run --project Lane.Host -- migrate --data <v2 data.json> --dry-run
@@ -557,6 +557,20 @@ say in whether Lane replies — it turns gateway events into `InboundEvent`s and
 channel the kernel writes back through, exactly as the terminal does. That symmetry is what
 lets them run in one process, and it is why adding the HTTP API cost one project and two
 lines in the host: a keyed factory registration, and the streaming observer.
+
+**Her Discord status is a line several things share.** Discord gives a bot one string, so the
+status is composed rather than written: each source owns a `DiscordStatusSlot` and sets or
+clears only its own part, and the enum's order is the order they render in. Her face is the
+first slot and reads off the event bus like the face server does — the surface is told
+nothing directly, and it deliberately does not filter by session, since a mood she reached in
+another conversation is still her mood. Adding "reading *Solaris*" or who she is listening to
+later is a slot and a subscription, with nothing already on the line touched.
+
+Writes are coalesced, not queued: presence is rate limited per gateway session and her
+expression changes with every turn, so only the latest line survives the wait — an emoticon
+from three moods ago is not worth a slot in that budget. A failed update is logged and
+dropped, because a status is how she looks and not how she works, and the line is sent again
+on `Ready`, since Discord forgets a bot's presence when the session re-identifies.
 
 **Model capabilities are declared per instance, not per provider.** OpenRouter fronts
 hundreds of models whose tool support differs completely, so a model says what it can do
