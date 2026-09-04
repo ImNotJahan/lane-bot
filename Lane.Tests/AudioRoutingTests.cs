@@ -171,7 +171,7 @@ public sealed class AudioRoutingTests
 
         await using AudioRouter router = new(
             harness.Kernel,
-            () => new ScriptedRecognizer(new Transcript("hello", IsFinal: true, TimeSpan.Zero)),
+            _ => new ScriptedRecognizer(new Transcript("hello", IsFinal: true, TimeSpan.Zero)),
             new NoVoiceFloor(),
             NullLogger<AudioRouter>.Instance);
 
@@ -207,7 +207,7 @@ public sealed class AudioRoutingTests
 
         await using AudioRouter router = new(
             harness.Kernel,
-            () => new ScriptedRecognizer(new Transcript("something", IsFinal: true, TimeSpan.Zero)),
+            _ => new ScriptedRecognizer(new Transcript("something", IsFinal: true, TimeSpan.Zero)),
             new NoVoiceFloor(),
             NullLogger<AudioRouter>.Instance);
 
@@ -231,7 +231,7 @@ public sealed class AudioRoutingTests
 
         await using AudioRouter router = new(
             harness.Kernel,
-            () => new ScriptedRecognizer(
+            _ => new ScriptedRecognizer(
                 new Transcript("partial", IsFinal: false, TimeSpan.Zero),
                 new Transcript("partial words", IsFinal: false, TimeSpan.Zero)),
             new NoVoiceFloor(),
@@ -255,7 +255,7 @@ public sealed class AudioRoutingTests
 
         await using AudioRouter router = new(
             harness.Kernel,
-            () => new ScriptedRecognizer(),
+            _ => new ScriptedRecognizer(),
             new NoVoiceFloor(),
             NullLogger<AudioRouter>.Instance);
 
@@ -283,7 +283,7 @@ public sealed class AudioRoutingTests
         // so "the first one" is a race.
         await using AudioRouter router = new(
             harness.Kernel,
-            () => new BreaksForOneSpeaker("alice",
+            _ => new BreaksForOneSpeaker("alice",
                 new Transcript("still here", IsFinal: true, TimeSpan.Zero)),
             new NoVoiceFloor(),
             NullLogger<AudioRouter>.Instance);

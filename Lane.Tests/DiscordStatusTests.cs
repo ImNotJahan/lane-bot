@@ -29,6 +29,34 @@ public sealed class DiscordStatusTests
     }
 
     [Fact]
+    public void Sleep_sits_after_her_face_and_shares_the_line_with_it()
+    {
+        DiscordStatusLine line = new();
+
+        line.Set(DiscordStatusSlot.Sleep, "zzz");
+        line.Set(DiscordStatusSlot.Face, "( ._.)");
+
+        Assert.Equal("( ._.)  zzz", line.Text);
+    }
+
+    [Fact]
+    public void Waking_up_clears_her_sleep_part_without_disturbing_her_face()
+    {
+        // The heartbeat sets this slot every ten minutes whether or not anything changed, so
+        // clearing has to be as cheap and as local as setting.
+        DiscordStatusLine line = new();
+
+        line.Set(DiscordStatusSlot.Face, "( ._.)");
+        line.Set(DiscordStatusSlot.Sleep, "zzz");
+
+        Assert.True(line.Set(DiscordStatusSlot.Sleep, null));
+        Assert.Equal("( ._.)", line.Text);
+
+        // And a second identical clear is not a gateway write.
+        Assert.False(line.Set(DiscordStatusSlot.Sleep, null));
+    }
+
+    [Fact]
     public void Nothing_to_show_is_an_empty_line_rather_than_a_blank_status()
     {
         DiscordStatusLine line = new();

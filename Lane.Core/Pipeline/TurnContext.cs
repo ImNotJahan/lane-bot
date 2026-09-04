@@ -45,6 +45,17 @@ public sealed class TurnContext
 
     public string? SuppressionReason { get; set; }
 
+    /// <summary>
+    /// Whether memory handlers see this turn. False only while she is asleep.
+    ///
+    /// Separate from <see cref="Suppressed"/> because until now "do not reply" and "do not
+    /// remember" have been the same decision. Sleeping keeps the transcript complete — nothing
+    /// said to her is ever lost — while stopping the handlers, so no summariser or profiler runs
+    /// over a conversation she was not present for. That is also what makes sleep cost nothing
+    /// rather than nearly nothing.
+    /// </summary>
+    public bool RecordToMemory { get; set; } = true;
+
     /// <summary>Messages the turn wants persisted — set by the stages that produce them.</summary>
     public List<LaneMessage> Produced { get; } = [];
 

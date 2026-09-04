@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Lane.Audio;
+using Lane.Core.Energy;
 using Lane.Core.Events;
 using Lane.Core.Identity;
 using Lane.Core.Kernel;
@@ -49,6 +50,8 @@ public sealed class DiscordSurface : ISurface
     private readonly DiscordStatusPublisher _status;
 
     private IDisposable? _presence;
+
+    private IDisposable? _energy;
 
     private CancellationTokenSource? _lifetime;
 
@@ -119,6 +122,14 @@ public sealed class DiscordSurface : ISurface
 
         _presence = _bus.Subscribe<PresenceChanged>(
             change => _status.Set(DiscordStatusSlot.Face, change.Emoticon));
+
+        // Null clears the slot, and the line reports whether it actually changed — so a
+        // heartbeat every ten minutes that finds her still rested costs no gateway write.
+        _energy = _bus.Subscribe<EnergyChanged>(change => _status.Set(DiscordStatusSlot.Sleep,
+            change.State.Asleep                      ? "zzz"
+          : change.State.Tier == EnergyTier.Weary    ? "worn out"
+          : change.State.Tier == EnergyTier.Tired    ? "tired"
+          :                                            null));
     }
 
     /// <summary>Sends the composed line to the gateway. An empty line clears the status.</summary>
@@ -396,6 +407,9 @@ public sealed class DiscordSurface : ISurface
 
         _presence?.Dispose();
         _presence = null;
+
+        _energy?.Dispose();
+        _energy = null;
 
         await _status.DisposeAsync().ConfigureAwait(false);
 

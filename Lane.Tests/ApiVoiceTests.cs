@@ -4,10 +4,12 @@ using System.Text.Json;
 using Lane.Audio;
 using Lane.Core.Agent;
 using Lane.Core.Identity;
+using Lane.Core.Memory;
 using Lane.Core.Sessions;
 using Lane.Core.Tools;
 using Lane.Surfaces.Api.Voice;
 using Lane.Testing;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
@@ -215,6 +217,89 @@ public sealed class ApiVoiceTests
         // Beta was never spoken to, and hears nothing. Both said "main"; they are not the
         // same conversation.
         Assert.False(await HasPendingMessageAsync(beta));
+    }
+
+    [Fact]
+    public async Task A_diarized_socket_puts_two_people_in_the_room_under_two_names()
+    {
+        // The whole path for a microphone with a room on the other end of it: bytes in over
+        // one socket, out as two people. The fake recogniser reads a speaker off the front
+        // of the same bytes, so "Guest-2|..." is this test's stand-in for two voices.
+        RecordingTranscript transcript = new();
+
+        await using ApiFixture api = await ApiFixture.StartAsync(
+            ScriptedLanguageModel.Transforming(said => $"heard {said}"),
+            services: s => s.AddSingleton<ITranscriptStore>(transcript),
+            audio: true);
+
+        using ClientWebSocket client = new();
+
+        await client.ConnectAsync(
+            api.WebSocketUri("/v1/sessions/main/voice?key=alpha-key&diarize=true"), CancellationToken.None);
+
+        JsonElement ready = await ReceiveEventAsync(client);
+
+        Assert.True(ready.GetProperty("data").GetProperty("diarize").GetBoolean());
+
+        await client.SendAsync(
+            Encoding.UTF8.GetBytes("Guest-1|it is raining"),
+            WebSocketMessageType.Binary, true, CancellationToken.None);
+
+        await FirstMessageAsync(client);
+
+        await client.SendAsync(
+            Encoding.UTF8.GetBytes("Guest-2|so it is"),
+            WebSocketMessageType.Binary, true, CancellationToken.None);
+
+        await FirstMessageAsync(client);
+
+        Assert.Equal(["it is raining"], transcript.Said["Voice 1"]);
+        Assert.Equal(["so it is"], transcript.Said["Voice 2"]);
+
+        // Not under the client app's own name, which is what one socket used to mean.
+        Assert.Empty(transcript.Said["Alpha"]);
+    }
+
+    [Fact]
+    public async Task A_socket_that_names_its_speaker_still_gets_one_person()
+    {
+        // The existing contract, unchanged: a headset is one person and says so.
+        RecordingTranscript transcript = new();
+
+        await using ApiFixture api = await ApiFixture.StartAsync(
+            ScriptedLanguageModel.Transforming(said => $"heard {said}"),
+            services: s => s.AddSingleton<ITranscriptStore>(transcript),
+            audio: true);
+
+        using ClientWebSocket client = new();
+
+        await client.ConnectAsync(
+            api.WebSocketUri("/v1/sessions/main/voice?key=alpha-key&speaker=Jahan"), CancellationToken.None);
+
+        await ReceiveEventAsync(client);
+
+        await client.SendAsync(
+            Encoding.UTF8.GetBytes("hello there"), WebSocketMessageType.Binary, true, CancellationToken.None);
+
+        await FirstMessageAsync(client);
+
+        Assert.Equal(["hello there"], transcript.Said["Jahan"]);
+    }
+
+    [Fact]
+    public async Task Naming_a_speaker_and_asking_for_diarization_is_refused()
+    {
+        // Contradictory instructions. Honouring the name would file a whole room under one
+        // person — the exact fault diarization is here to fix — so neither is guessed at.
+        await using ApiFixture api = await ApiFixture.StartAsync(audio: true);
+
+        using ClientWebSocket client = new();
+
+        client.Options.SetRequestHeader("Authorization", "Bearer alpha-key");
+
+        await Assert.ThrowsAsync<WebSocketException>(() =>
+            client.ConnectAsync(
+                api.WebSocketUri("/v1/sessions/main/voice?diarize=true&speaker=Jahan"), CancellationToken.None));
     }
 
     [Fact]

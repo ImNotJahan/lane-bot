@@ -1,4 +1,5 @@
 using Lane.Core.Agent;
+using Lane.Core.Energy;
 using Lane.Core.Memory;
 using Lane.Core.Tools;
 using Lane.Core.Context;
@@ -26,9 +27,17 @@ public sealed class ModelTurnStage(
     ISessionDescriptions   descriptions,
     IServiceProvider       services,
     IOptions<AgentOptions> options,
+    IOptions<EnergyOptions> energy,
     ILogger<ModelTurnStage> log) : ITurnStage
 {
-    private readonly AgentOptions _options = options.Value;
+    private readonly AgentOptions  _options = options.Value;
+    private readonly EnergyOptions _energy  = energy.Value;
+
+    /// <summary>
+    /// Never below this, however tired she is. A ceiling low enough to cut her off mid-sentence
+    /// is a bug that reads as one, rather than as brevity.
+    /// </summary>
+    private const int MinOutputTokens = 128;
 
     public async Task ExecuteAsync(TurnContext ctx, Func<Task> next, CancellationToken ct)
     {
@@ -73,7 +82,11 @@ public sealed class ModelTurnStage(
             return;
         }
 
-        ToolScope scope = new(ctx.Descriptor, ctx.Kind, RequesterOf(ctx));
+        EnergyTier tier = TierOf(ctx);
+
+        // Carried on the scope but not used to filter the advertised list — see the note in
+        // ToolRegistry.Gate. What it does is let the registry refuse an expensive call.
+        ToolScope scope = new(ctx.Descriptor, ctx.Kind, RequesterOf(ctx), tier);
 
         ToolSet available = await tools.ResolveAsync(scope, ct).ConfigureAwait(false);
 
@@ -96,14 +109,22 @@ public sealed class ModelTurnStage(
                 Descriptor = ctx.Descriptor,
                 Requester  = RequesterOf(ctx),
                 Turn       = ctx.Kind,
+                Energy     = tier,
                 Memory     = ctx.Items.TryGetValue("memory", out object? m) && m is MemoryContext mc ? mc : new(),
                 Services   = services,
                 Sessions   = services.GetService<ISessionRegistry>()
             },
             Lane            = lane,
             Session         = ctx.Session.Id,
-            Budget          = _options.Budget,
-            MaxOutputTokens = _options.MaxOutputTokens,
+
+            // Tiredness in the two places it is actually enforced rather than merely asked
+            // for: a lower ceiling on the reply, and fewer steps and tool calls to reach it.
+            // AgentLoop answers an over-budget call with a tool_result the model reads, so she
+            // is told she has run out rather than quietly truncated.
+            Budget          = _energy.For(tier)?.Scale(_options.Budget) ?? _options.Budget,
+            MaxOutputTokens = _energy.For(tier)?.Scale(_options.MaxOutputTokens, MinOutputTokens)
+                              ?? _options.MaxOutputTokens,
+
             Temperature     = _options.Temperature,
             Observer        = observer,
             CacheLineage    = $"respond:{model.Descriptor.InstanceId}"
@@ -166,10 +187,10 @@ public sealed class ModelTurnStage(
     /// </summary>
     private string Persona(TurnContext ctx)
     {
-        // The fallback still gets the mood appended. Otherwise a checkout with no template
-        // files silently loses the pitch of every reply, which is the sort of difference
-        // nobody thinks to look for.
-        if (!prompts.Has(_options.PersonaPrompt)) return _options.Persona + Mood(ctx);
+        // The fallback still gets the mood and the tiredness appended. Otherwise a checkout
+        // with no template files silently loses the pitch of every reply, which is the sort of
+        // difference nobody thinks to look for.
+        if (!prompts.Has(_options.PersonaPrompt)) return _options.Persona + Mood(ctx) + Energy(ctx);
 
         IEnumerable<string> people = ctx.Descriptor.KnownParticipants
             .Where(p => !p.IsLane)
@@ -184,6 +205,7 @@ public sealed class ModelTurnStage(
             ("participants", string.IsNullOrWhiteSpace(participants) ? "someone" : participants),
             ("session", ctx.Descriptor.DisplayName),
             ("mood", Mood(ctx)),
+            ("energy", Energy(ctx)),
             ("time", formatter.FormatTime(DateTimeOffset.UtcNow,
                 new TranscriptFormatOptions(_options.DisplayOffset, IncludeRelativeTime: false))));
     }
@@ -206,4 +228,44 @@ public sealed class ModelTurnStage(
             _       => " This barely warrants a reply; keep it short and low-key."
         };
     }
+
+    /// <summary>
+    /// How worn out she is, as the sleep gate found her.
+    ///
+    /// A slot of its own rather than more text in <c>{{mood}}</c>: mood is a judgement about
+    /// the message in front of her, energy is a standing condition about her, and the two
+    /// compose — a message worth answering properly, answered briefly because she is tired, is
+    /// a real combination. Absent entirely when no energy service is wired, so a container
+    /// running on BoundlessEnergy produces exactly the prompt it always did.
+    /// </summary>
+    private string Energy(TurnContext ctx)
+    {
+        // Being woken up outranks the tier: she has just been dragged out of sleep, and how
+        // much is left in the tank is not the notable thing about that.
+        if (ctx.Items.TryGetValue(SleepGateStage.RousedKey, out object? roused) && roused is false)
+            return " Someone has just woken you up and you are barely conscious. " +
+                   "Answer them in one sentence and go back to sleep.";
+
+        return TierOf(ctx) switch
+        {
+            EnergyTier.Tired =>
+                " You are getting tired. Keep this shorter than usual, and do not go looking " +
+                "things up unless it actually matters.",
+
+            EnergyTier.Weary =>
+                " You are exhausted and running on empty. Short answers. Do not use tools " +
+                "unless the question is genuinely unanswerable without one.",
+
+            _ => ""
+        };
+    }
+
+    /// <summary>
+    /// What the sleep gate measured, or rested when nothing did — a turn that never passed
+    /// through the gate, which is every turn in a container with no energy service.
+    /// </summary>
+    private static EnergyTier TierOf(TurnContext ctx) =>
+        ctx.Items.TryGetValue(SleepGateStage.EnergyKey, out object? value) && value is EnergyState state
+            ? state.Tier
+            : EnergyTier.Rested;
 }

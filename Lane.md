@@ -586,6 +586,62 @@ Vector search is deliberately **not** built. A rolling summary plus a small prof
 most of what "she remembers me" means; retrieval earns its place once history outgrows what
 summaries can hold, and that decision is easier to make with these in place.
 
+**Energy is a rate, not a quota.** `Lane:Energy` gives her a token budget over a rolling
+window — twenty million a day — which every model call debits and which accrues back a
+hundred-and-forty-fourth at a time, every ten minutes. What is left as a fraction of the
+budget is her energy, and it changes how she behaves rather than whether she is allowed to
+act: above 70% nothing is different; below it her replies get a lower ceiling, her agent loop
+gets fewer steps and tool calls, and her thoughts spread out. Running out is **sleep**, which
+is still not a hard stop — she costs money the moment somebody says her name.
+
+Accrual is **lazy, from wall time**. The stored state is `(remaining, accruedThrough)` and any
+read replays however many whole intervals have elapsed since, advancing the phase by whole
+steps rather than to *now* so that reading the number often does not drag the next accrual
+forward. A restart, a suspended laptop and a test with a fake clock therefore all behave
+identically, and the ten-minute timer is a heartbeat for the dashboard rather than the
+mechanism — a missed tick costs nothing. One `TokenUsageEvent` subscription catches respond,
+monologue, routing and summarize together, because every model in the host is already wrapped
+in `TelemetryLanguageModel`.
+
+**Sleep is latched, not derived.** It is set when a debit takes her to zero and cleared only by
+accrual reaching 70% or by being named with something still in the tank. That is what makes
+"asleep at 30%" and "awake at 60%" both representable — being dragged out to answer one message
+must not count as having woken up, and `Wake` returning false is exactly that case: she answers
+and goes straight back under. Remaining may go negative, because the budget is a rate and
+several concurrent turns can each start with tokens in hand and all finish; it is floored at a
+whole window's debt so one runaway turn cannot put her under for a week.
+
+`SleepGateStage` sits between ingest and context assembly. After ingest, because that is what
+puts the incoming messages into `Produced` and a message she slept through must still reach the
+transcript; before assembly, because one she is going to ignore should not cost a memory read;
+and before the response policy, because that gate is a model call and asking a small model
+whether a message was meant for her is paying to find out something that cannot matter.
+Sleeping through a message costs **zero** model calls. Her name is matched as a plain
+word-boundary pattern rather than anything surface-specific, since the Discord surface already
+resolves a mention of Lane to the literal word "Lane" in the message text — so one rule covers
+being @-mentioned, being typed at, the terminal and the API. A hyphen is a word boundary, so
+"multi-lane" does reach her; that is a known cost of the simple rule.
+
+A slept-through turn is the one thing in the harness that is **written down but not remembered**
+— `TurnContext.RecordToMemory`, distinct from `Suppressed`, which has until now meant both. The
+transcript stays complete, so nothing said to her is ever lost, while no handler runs: no
+summariser, no profiler, and so no model calls at all. Being suppressed by the routing gate is
+still remembered, because sitting a conversation out is not the same as not being there.
+
+**Tiredness reaches the tools by refusal, not by hiding them.** A tier names globs it will not
+run — `web_*` while worn out — and `ToolRegistry.Gate` enforces that only when a call arrives,
+never when advertising. Withholding the tool would change `ToolSet.Fingerprint`, and with it the
+cache lineage of every request behind it: a prompt-cache miss bought in exchange for saving
+tokens, at the moment she is trying to spend less, flapping each time she crosses a threshold.
+This is the same argument `ToolOptions.PreferStableSet` makes about capabilities, and the
+refusal is text she can read rather than a tool that silently vanished. A tier's ceilings are
+clamped *against* the configured budget rather than replacing it, so tiredness can only ever
+lower a limit — a tier configured generously is not a way around `AgentBudget`.
+
+One number for all of her, like the monologue loop: a DM and a busy channel share it. Worth
+knowing, because the first surprise is "she answered me on Discord but ignored me on the
+terminal".
+
 **Her inner life is one loop that names its target.** The monologue has no session of its
 own; when a thought is worth saying it calls `speak_to_session`, which posts onto that
 session's queue rather than writing to its channel. That single rule is why a volunteered

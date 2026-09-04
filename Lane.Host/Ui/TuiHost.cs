@@ -1,3 +1,4 @@
+using Lane.Core.Energy;
 using Lane.Core.Events;
 using Lane.Core.Models;
 using Lane.Core.Monologue;
@@ -22,6 +23,7 @@ public sealed class TuiHost(
     ILanguageModelRegistry models,
     BufferedLogSink logs,
     IMonologueScheduler monologue,
+    IEnergyService energy,
     IHostApplicationLifetime lifetime,
     ILogger<TuiHost> log,
     ChatView? chat = null) : IHostedService
@@ -55,7 +57,7 @@ public sealed class TuiHost(
             // thing worth knowing if input ever misbehaves on one terminal but not another.
             log.LogInformation("Dashboard driver: {Driver}", app.Driver?.GetType().Name ?? "(none)");
 
-            DashboardView dashboard = new(bus, sessions, models, logs, monologue, chat);
+            DashboardView dashboard = new(bus, sessions, models, logs, monologue, energy, chat);
 
             // The chat pane claims focus from its own Initialized event, once there is a
             // running application to hold it.

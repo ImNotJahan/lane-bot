@@ -40,10 +40,11 @@ public static class VoiceEndpoints
             int? channels,
             int? outRate,
             int? outChannels,
-            string? speaker) =>
+            string? speaker,
+            bool? diarize) =>
             HandleAsync(
                 context, key, map, kernel, options, router,
-                rate, channels, outRate, outChannels, speaker,
+                rate, channels, outRate, outChannels, speaker, diarize,
                 loggers.CreateLogger("Lane.Surfaces.Api.Voice")));
 
     private static async Task<IResult> HandleAsync(
@@ -58,6 +59,7 @@ public static class VoiceEndpoints
         int? outRate,
         int? outChannels,
         string? speaker,
+        bool? diarize,
         ILogger log)
     {
         ApiClient client = ApiAuth.Require(context);
@@ -66,6 +68,14 @@ public static class VoiceEndpoints
             return Results.BadRequest(new ErrorResponse("not_a_websocket", "This endpoint expects a WebSocket upgrade."));
 
         if (!ApiKeys.IsValid(key)) return Errors.BadKey(key);
+
+        // Naming a speaker and asking for the speakers to be told apart are contradictory
+        // instructions, and silently honouring one of them would put a whole room's words
+        // under one person's name — the exact fault diarization is here to fix.
+        if (diarize == true && !string.IsNullOrWhiteSpace(speaker))
+            return Results.BadRequest(new ErrorResponse(
+                "conflicting_speaker",
+                "Send either 'speaker' for a microphone with one person on it, or 'diarize' for one with several."));
 
         // Audio being unconfigured costs the socket, not the surface — every text endpoint
         // keeps working, and the client is told why rather than left guessing.
@@ -90,7 +100,7 @@ public static class VoiceEndpoints
 
         await RunAsync(
             socket, client, key, map, kernel, router,
-            incoming, outgoing, speaker, options, log, context.RequestAborted).ConfigureAwait(false);
+            incoming, outgoing, speaker, diarize == true, options, log, context.RequestAborted).ConfigureAwait(false);
 
         return Results.Empty;
     }
@@ -105,6 +115,7 @@ public static class VoiceEndpoints
         AudioFormat incoming,
         AudioFormat outgoing,
         string? speakerName,
+        bool diarize,
         ApiSurfaceOptions options,
         ILogger log,
         CancellationToken ct)
@@ -125,12 +136,18 @@ public static class VoiceEndpoints
         ApiSessionEntry entry = map.OpenWith(client, key, SessionKind.Voice, speaker, output);
 
         await using ApiAudioSource source = new(
-            new AudioSourceId($"{map.Surface.Value}/ws/{Guid.NewGuid():n}"), incoming, speaker.DisplayName);
+            new AudioSourceId($"{map.Surface.Value}/ws/{Guid.NewGuid():n}"),
+            incoming,
+            diarize ? null : speaker.DisplayName);
 
-        router.Register(source, id, speaker);
+        // A socket that says who is on it is one person's microphone; one that asks to be
+        // diarized is a microphone in a room, and the speaker it opened with is only who
+        // the words fall back to when the audio cannot place them.
+        if (diarize) router.RegisterShared(source, id, speaker);
+        else router.Register(source, id, speaker);
 
-        log.LogInformation("Voice socket open for {Client} on {Session} ({In} in, {Out} out)",
-            client.Id, id, incoming, outgoing);
+        log.LogInformation("Voice socket open for {Client} on {Session} ({In} in, {Out} out){Diarized}",
+            client.Id, id, incoming, outgoing, diarize ? ", telling speakers apart" : "");
 
         try
         {
@@ -138,7 +155,8 @@ public static class VoiceEndpoints
             {
                 session  = id.Value,
                 input    = new { rate = incoming.SampleRate, channels = incoming.Channels, encoding = "pcm_s16le" },
-                output   = new { rate = outgoing.SampleRate, channels = outgoing.Channels, encoding = "pcm_s16le" }
+                output   = new { rate = outgoing.SampleRate, channels = outgoing.Channels, encoding = "pcm_s16le" },
+                diarize
             }, ct).ConfigureAwait(false);
 
             await ReceiveAsync(socket, source, kernel, id, options, ct).ConfigureAwait(false);

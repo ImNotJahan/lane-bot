@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Lane.Core;
+using Lane.Core.Energy;
 using Lane.Core.Events;
 using Lane.Core.Identity;
 using Lane.Core.Memory;
@@ -47,7 +48,8 @@ public sealed class MonologueTests : IAsyncDisposable
     private MonologueService Build(
         ScriptedLanguageModel model,
         out LaneHarness harness,
-        Action<MonologueOptions>? configure = null)
+        Action<MonologueOptions>? configure = null,
+        Action<ServiceCollection>? register = null)
     {
         ServiceCollection services = new();
 
@@ -77,6 +79,8 @@ public sealed class MonologueTests : IAsyncDisposable
             o.MinInterval  = TimeSpan.FromMilliseconds(10);
             configure?.Invoke(o);
         });
+
+        register?.Invoke(services);
 
         _services = services.BuildServiceProvider();
 
@@ -372,6 +376,106 @@ public sealed class MonologueTests : IAsyncDisposable
         string system = string.Join("\n", harness.Model.Requests[0].System.Select(s => s.Text));
 
         Assert.Contains("discord.main/Text/general", system);
+    }
+
+    // ---- tiredness ---------------------------------------------------------
+
+    /// <summary>A metabolism a test can set directly, rather than one it has to exhaust.</summary>
+    private sealed class StubEnergy(EnergyTier tier, bool asleep) : IEnergyService
+    {
+        public EnergyState Current => new(asleep ? 0 : 100, 100, asleep, default) { Tier = tier };
+
+        public void Spend(TokenUsage usage, string? role) { }
+
+        public bool Wake(string reason) => !asleep;
+
+        public TimeSpan? TimeUntilRested => asleep ? TimeSpan.FromHours(1) : null;
+    }
+
+    [Fact]
+    public async Task She_does_not_think_while_she_is_asleep()
+    {
+        // No thoughts, and no bill for having them. The loop keeps running, which is why the
+        // tick says "asleep" rather than the schedule simply going quiet.
+        MonologueService monologue = Build(
+            ScriptedLanguageModel.Echoing("something she would have thought"),
+            out LaneHarness harness,
+            register: services => services.AddSingleton<IEnergyService>(
+                new StubEnergy(EnergyTier.Weary, asleep: true)));
+
+        List<MonologueTick> ticks = [];
+        harness.Services.GetRequiredService<IEventBus>().Subscribe<MonologueTick>(ticks.Add);
+
+        await monologue.StartAsync(CancellationToken.None);
+
+        await Eventually(() => ticks.FirstOrDefault(t => t.Reason == "asleep"), Timeout);
+
+        await monologue.StopAsync(CancellationToken.None);
+
+        Assert.Null(monologue.Status.LastThought);
+        Assert.Equal(0, harness.Model.CallCount);
+    }
+
+    [Fact]
+    public async Task Being_tired_spreads_her_thoughts_further_apart()
+    {
+        MonologueService monologue = Build(
+            ScriptedLanguageModel.Echoing("mm"),
+            out LaneHarness harness,
+            configure: o =>
+            {
+                o.Interval    = TimeSpan.FromSeconds(30);
+                o.MaxInterval = TimeSpan.FromHours(2);
+            },
+            register: services => services.AddSingleton<IEnergyService>(
+                new StubEnergy(EnergyTier.Weary, asleep: false)));
+
+        List<MonologueTick> ticks = [];
+        harness.Services.GetRequiredService<IEventBus>().Subscribe<MonologueTick>(ticks.Add);
+
+        await monologue.StartAsync(CancellationToken.None);
+
+        MonologueTick cadence = await Eventually(
+            () => ticks.FirstOrDefault(t => t.Reason == "default cadence"), Timeout);
+
+        await monologue.StopAsync(CancellationToken.None);
+
+        // Four times the thirty-second cadence, so comfortably past a minute out.
+        Assert.NotNull(cadence.NextThoughtAt);
+        Assert.True(cadence.NextThoughtAt - DateTimeOffset.UtcNow > TimeSpan.FromSeconds(90),
+            $"expected the cadence to be stretched, but the next thought is at {cadence.NextThoughtAt}");
+    }
+
+    [Fact]
+    public async Task A_stretched_cadence_is_still_clamped_by_the_maximum()
+    {
+        // Tiredness slows her down; it does not get to override the ceiling on how long she
+        // may go without a thought.
+        MonologueService monologue = Build(
+            ScriptedLanguageModel.Echoing("mm"),
+            out LaneHarness harness,
+            configure: o =>
+            {
+                o.Interval    = TimeSpan.FromMinutes(10);
+                o.MaxInterval = TimeSpan.FromMinutes(12);
+            },
+            register: services => services.AddSingleton<IEnergyService>(
+                new StubEnergy(EnergyTier.Weary, asleep: false)));
+
+        List<MonologueTick> ticks = [];
+        harness.Services.GetRequiredService<IEventBus>().Subscribe<MonologueTick>(ticks.Add);
+
+        await monologue.StartAsync(CancellationToken.None);
+
+        MonologueTick cadence = await Eventually(
+            () => ticks.FirstOrDefault(t => t.Reason == "default cadence"), Timeout);
+
+        await monologue.StopAsync(CancellationToken.None);
+
+        // Forty minutes stretched, twelve allowed.
+        Assert.NotNull(cadence.NextThoughtAt);
+        Assert.True(cadence.NextThoughtAt - DateTimeOffset.UtcNow <= TimeSpan.FromMinutes(12),
+            $"MaxInterval was not applied; the next thought is at {cadence.NextThoughtAt}");
     }
 
     public async ValueTask DisposeAsync()

@@ -1,3 +1,4 @@
+using Lane.Core.Energy;
 using Lane.Core.Events;
 using Lane.Core.Models;
 using Lane.Core.Monologue;
@@ -20,6 +21,7 @@ public sealed class DashboardView : Window
         ILanguageModelRegistry models,
         BufferedLogSink logs,
         IMonologueScheduler monologue,
+        IEnergyService energy,
         ChatView? chat)
     {
         Title = "lane";
@@ -36,18 +38,26 @@ public sealed class DashboardView : Window
             X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Percent(30)
         };
 
+        // Three across the middle band. Energy is the narrowest of them: it is four short
+        // lines that change slowly, and giving it more would come out of the session list.
         SessionsView sessionsView = new(bus, sessions)
         {
-            X = 0, Y = Pos.Bottom(modelsView), Width = Dim.Percent(60), Height = Dim.Percent(25)
+            X = 0, Y = Pos.Bottom(modelsView), Width = Dim.Percent(45), Height = Dim.Percent(25)
+        };
+
+        EnergyView energyView = new(bus, energy)
+        {
+            X = Pos.Right(sessionsView), Y = Pos.Bottom(modelsView),
+            Width = Dim.Percent(22), Height = Dim.Percent(25)
         };
 
         MonologueView monologueView = new(bus, monologue)
         {
-            X = Pos.Right(sessionsView), Y = Pos.Bottom(modelsView),
+            X = Pos.Right(energyView), Y = Pos.Bottom(modelsView),
             Width = Dim.Fill(), Height = Dim.Percent(25)
         };
 
-        Add(modelsView, sessionsView, monologueView);
+        Add(modelsView, sessionsView, energyView, monologueView);
 
         if (chat is not null)
         {

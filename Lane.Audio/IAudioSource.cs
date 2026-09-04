@@ -19,7 +19,44 @@ public interface IAudioSource : IAsyncDisposable
     IAsyncEnumerable<AudioFrame> ReadAsync(CancellationToken ct);
 }
 
-public sealed record Transcript(string Text, bool IsFinal, TimeSpan Offset, float? Confidence = null);
+/// <summary>
+/// One utterance's worth of audio, and what the recogniser called whoever spoke it.
+///
+/// The label distinguishes speakers within a live recognition session and nothing beyond
+/// it — it is reassigned the moment that session ends. The audio is what outlives it: it is
+/// the only thing a voiceprint can be taken from, and it has to be carried here because a
+/// recogniser is the last place that still knows which samples belonged to which utterance.
+/// </summary>
+public sealed record VoiceSample(string Label, ReadOnlyMemory<byte> Pcm, AudioFormat Format)
+{
+    public TimeSpan Duration => Format.DurationOf(Pcm.Length);
+
+    /// <summary>True when the audio was lost — the label is all there is to go on.</summary>
+    public bool IsLabelOnly => Pcm.Length == 0;
+}
+
+public sealed record Transcript(
+    string Text,
+    bool IsFinal,
+    TimeSpan Offset,
+    float? Confidence = null,
+
+    /// <summary>
+    /// Null when the transport already knows who is speaking, which is the common case:
+    /// Discord gives one source per speaker, and a named socket says who it is up front.
+    /// Set only when one source carries several people and the words alone cannot say which.
+    /// </summary>
+    VoiceSample? Voice = null);
+
+/// <summary>How a source's speakers are told apart.</summary>
+public enum SpeakerAttribution
+{
+    /// <summary>One source, one person, settled before a word is said.</summary>
+    Known,
+
+    /// <summary>One microphone, several people, decided per utterance.</summary>
+    Diarized,
+}
 
 /// <summary>
 /// Turns one audio source into words.

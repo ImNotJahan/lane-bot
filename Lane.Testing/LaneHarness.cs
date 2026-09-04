@@ -1,4 +1,5 @@
 using Lane.Core;
+using Lane.Core.Events;
 using Lane.Core.Identity;
 using Lane.Core.Kernel;
 using Lane.Core.Messages;
@@ -67,7 +68,14 @@ public sealed class LaneHarness : IAsyncDisposable
             sessionOptions?.Invoke(o);
         });
 
-        services.AddSingleton<ILanguageModel>(scripted);
+        // Wrapped the way the host wraps every model, so TokenUsageEvent is actually published
+        // here too. Without it a test could never observe anything that reads what a turn cost
+        // — energy, most of all — and the harness would quietly disagree with the real thing on
+        // the one path such a feature depends on. The wrapper delegates everything, so
+        // harness.Model still records requests and counts calls.
+        services.AddSingleton<ILanguageModel>(sp =>
+            new TelemetryLanguageModel(scripted, sp.GetRequiredService<IEventBus>()));
+
         services.AddSingleton<ILanguageModelRegistry>(sp => new LanguageModelRegistry(
             sp.GetServices<ILanguageModel>(),
             new Dictionary<string, string>

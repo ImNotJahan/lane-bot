@@ -1,6 +1,7 @@
 using Lane.Core;
 using Lane.Audio;
 using Lane.Core.Agent;
+using Lane.Core.Energy;
 using Lane.Core.Events;
 using Lane.Core.Identity;
 using Lane.Core.Memory;
@@ -60,6 +61,7 @@ public static class LaneHostBuilderExtensions
         RegisterIdentities(builder.Services, section.GetSection("Identities"));
         RegisterSessionDescriptions(builder.Services);
         RegisterMonologue(builder.Services, section.GetSection("Monologue"));
+        RegisterEnergy(builder.Services, section.GetSection("Energy"));
         RegisterFace(builder.Services, section.GetSection("Face"));
         RegisterAudio(builder.Services, section.GetSection("Audio"));
         RegisterMemory(builder.Services, section.GetSection("Memory"));
@@ -93,6 +95,7 @@ public static class LaneHostBuilderExtensions
             sp.GetRequiredService<ILanguageModelRegistry>(),
             logs,
             sp.GetRequiredService<IMonologueScheduler>(),
+            sp.GetRequiredService<IEnergyService>(),
             sp.GetRequiredService<IHostApplicationLifetime>(),
             sp.GetRequiredService<ILogger<TuiHost>>(),
             sp.GetRequiredService<ChatView>()));
@@ -137,6 +140,13 @@ public static class LaneHostBuilderExtensions
         services.AddSingleton<IIdentityDirectory>(sp => sp.GetRequiredService<IdentityDirectory>());
         services.AddHostedService(sp => sp.GetRequiredService<IdentityDirectory>());
 
+        // Voices are kept apart from accounts deliberately: a link somebody proved and a
+        // voice that merely sounded right are different kinds of claim, and merging the two
+        // stores would leave no way to ask afterwards which one a memory rested on.
+        services.AddSingleton<VoiceprintDirectory>();
+        services.AddSingleton<IVoiceprintDirectory>(sp => sp.GetRequiredService<VoiceprintDirectory>());
+        services.AddHostedService(sp => sp.GetRequiredService<VoiceprintDirectory>());
+
         services.AddSingleton<IIdentityResolver>(sp => new IdentityResolver(
             identities,
             sp.GetService<ILogger<IdentityResolver>>(),
@@ -175,6 +185,75 @@ public static class LaneHostBuilderExtensions
         });
     }
 
+    /// <summary>
+    /// Her metabolism. Bound and re-applied field by field, like the monologue, so that the
+    /// options the stages read are the same object the enabled check was made against — and so
+    /// a disabled section leaves <c>BoundlessEnergy</c> in place rather than a service that has
+    /// to remember to do nothing.
+    /// </summary>
+    /// <summary>
+    /// Reads the energy section, taking care over the lists in it.
+    ///
+    /// <c>Bind</c> *appends* to a list that already has items rather than replacing it, so
+    /// binding straight onto the code defaults would merge the two: every configured entry
+    /// would arrive twice, and <c>"DenyTools": []</c> could never turn a default off — which is
+    /// the one thing an operator writing an empty array is trying to do. So the lists are
+    /// cleared first and restored only where the file says nothing, leaving an omitted list
+    /// with its default and an empty one taken at its word.
+    ///
+    /// Internal rather than private so the shape of the shipped configuration can be asserted
+    /// without standing up a host and its secrets.
+    /// </summary>
+    internal static EnergyOptions ReadEnergyOptions(IConfigurationSection section)
+    {
+        EnergyOptions defaults = new();
+        EnergyOptions options  = new();
+
+        options.WakeWords.Clear();
+        options.Tired.DenyTools.Clear();
+        options.Weary.DenyTools.Clear();
+
+        section.Bind(options);
+
+        if (!section.GetSection("WakeWords").Exists())       options.WakeWords       = defaults.WakeWords;
+        if (!section.GetSection("Tired:DenyTools").Exists()) options.Tired.DenyTools = defaults.Tired.DenyTools;
+        if (!section.GetSection("Weary:DenyTools").Exists()) options.Weary.DenyTools = defaults.Weary.DenyTools;
+
+        return options;
+    }
+
+    private static void RegisterEnergy(IServiceCollection services, IConfigurationSection section)
+    {
+        EnergyOptions options = ReadEnergyOptions(section);
+
+        if (!options.Enabled) return;
+
+        if (options.Budget <= 0)
+            throw new InvalidOperationException("Lane:Energy:Budget must be positive when energy is enabled.");
+
+        if (options.AccrualInterval <= TimeSpan.Zero || options.Window <= TimeSpan.Zero)
+            throw new InvalidOperationException(
+                "Lane:Energy:Window and Lane:Energy:AccrualInterval must both be positive. " +
+                "Note that a whole day is \"1.00:00:00\", not \"24:00:00\", which TimeSpan rejects.");
+
+        services.AddLaneEnergy(o =>
+        {
+            o.Enabled              = options.Enabled;
+            o.Budget               = options.Budget;
+            o.Window               = options.Window;
+            o.AccrualInterval      = options.AccrualInterval;
+            o.TiredBelow           = options.TiredBelow;
+            o.WearyBelow           = options.WearyBelow;
+            o.WakeAt               = options.WakeAt;
+            o.CacheReadWeight      = options.CacheReadWeight;
+            o.StartFull            = options.StartFull;
+            o.SkipInDirectSessions = options.SkipInDirectSessions;
+            o.WakeWords            = options.WakeWords;
+            o.Tired                = options.Tired;
+            o.Weary                = options.Weary;
+        });
+    }
+
     private static void RegisterFace(IServiceCollection services, IConfigurationSection section)
     {
         services.Configure<FaceOptions>(section);
@@ -204,6 +283,16 @@ public static class LaneHostBuilderExtensions
             throw new InvalidOperationException(
                 "Lane:Audio is enabled but the recognition key is missing. Set Recognition:KeyRef " +
                 "and Recognition:RegionRef, or turn Audio off.");
+        }
+
+        // Checked here rather than at the first utterance. A missing model does not stop
+        // Lane telling the people in a room apart; it stops her recognising one of them
+        // tomorrow, and that is not a difference anybody would notice until the day after.
+        if (options.Voiceprints.Enabled && !File.Exists(options.Voiceprints.ModelPath))
+        {
+            throw new InvalidOperationException(
+                $"Lane:Audio:Voiceprints is enabled but the model '{options.Voiceprints.ModelPath}' " +
+                "does not exist. Download a WeSpeaker ONNX export to that path, or turn Voiceprints off.");
         }
 
         // Only the provider that is actually going to speak has to be configured — flite

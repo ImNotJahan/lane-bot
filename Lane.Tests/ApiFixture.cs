@@ -126,14 +126,20 @@ public sealed class ApiFixture : IAsyncDisposable
 
         services.AddSingleton<Lane.Audio.ISpeechSynthesizer>(new EncodingBytesSynthesizer());
 
-        services.AddSingleton<Func<Lane.Audio.ISpeechRecognizer>>(
-            _ => () => new TranscribingBytesRecognizer());
+        services.AddSingleton<Func<Lane.Audio.SpeakerAttribution, Lane.Audio.ISpeechRecognizer>>(
+            _ => attribution => new TranscribingBytesRecognizer(attribution));
+
+        services.AddSingleton<Lane.Audio.Voiceprints.ISpeakerAttributor>(sp =>
+            new Lane.Audio.Voiceprints.LabelRosterAttributor(
+                sp.GetRequiredService<Lane.Core.Identity.IIdentityResolver>(),
+                sp.GetRequiredService<ILogger<Lane.Audio.Voiceprints.LabelRosterAttributor>>()));
 
         services.AddSingleton(sp => new Lane.Audio.AudioRouter(
             sp.GetRequiredService<Lane.Core.Kernel.IAgentKernel>(),
-            sp.GetRequiredService<Func<Lane.Audio.ISpeechRecognizer>>(),
+            sp.GetRequiredService<Func<Lane.Audio.SpeakerAttribution, Lane.Audio.ISpeechRecognizer>>(),
             sp.GetRequiredService<Lane.Audio.IVoiceFloor>(),
-            sp.GetRequiredService<ILogger<Lane.Audio.AudioRouter>>()));
+            sp.GetRequiredService<ILogger<Lane.Audio.AudioRouter>>(),
+            sp.GetRequiredService<Lane.Audio.Voiceprints.ISpeakerAttributor>()));
 
         services.AddSingleton<Lane.Core.Agent.IAgentObserverFactory>(sp => new Lane.Audio.VoiceObserverFactory(
             sp.GetRequiredService<Lane.Audio.ISpeechSynthesizer>(),

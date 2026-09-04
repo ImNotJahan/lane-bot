@@ -46,7 +46,10 @@ public sealed class PersistStage(
                 // sequence the store just assigned, not the zero it was created with.
                 LaneMessage stored = sequence > 0 ? message with { Sequence = sequence } : message;
 
-                await memory.RememberAsync(stored, memoryContext, ct).ConfigureAwait(false);
+                // The transcript is unconditional; memory is not. A turn she slept through is
+                // recorded in full and shown to no handler — see TurnContext.RecordToMemory.
+                if (ctx.RecordToMemory)
+                    await memory.RememberAsync(stored, memoryContext, ct).ConfigureAwait(false);
             }
             catch (Exception ex)
             {

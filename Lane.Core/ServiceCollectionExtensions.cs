@@ -1,6 +1,7 @@
 using System.Reflection;
 using Lane.Core.Agent;
 using Lane.Core.Context;
+using Lane.Core.Energy;
 using Lane.Core.Events;
 using Lane.Core.Identity;
 using Lane.Core.Presence;
@@ -38,6 +39,7 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<IEventBus, EventBus>();
         services.TryAddSingleton<IIdentityResolver>(IdentityResolver.Empty);
         services.TryAddSingleton<IIdentityDirectory>(NullIdentityDirectory.Instance);
+        services.TryAddSingleton<IVoiceprintDirectory>(NullVoiceprintDirectory.Instance);
         services.TryAddSingleton<ISessionDescriptions>(NullSessionDescriptions.Instance);
         services.TryAddSingleton<IPresenceSink, EventBusPresenceSink>();
         services.TryAddSingleton<ITranscriptFormatter, TranscriptFormatter>();
@@ -45,6 +47,10 @@ public static class ServiceCollectionExtensions
         services.AddOptions<SessionOptions>();
         services.AddOptions<AgentOptions>();
         services.AddOptions<ResponsePolicyOptions>();
+        services.AddOptions<EnergyOptions>();
+
+        // Lane with no metabolism, until AddLaneEnergy says otherwise.
+        services.TryAddSingleton<IEnergyService, BoundlessEnergy>();
 
         services.TryAddSingleton(sp =>
             new TurnBudget(sp.GetRequiredService<IOptions<SessionOptions>>().Value.MaxConcurrentTurns));
@@ -66,6 +72,13 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<AgentLoop>();
 
         services.AddSingleton<ITurnStage, IngestStage>();
+
+        // After ingest, because that is what puts the incoming messages into Produced and a
+        // message she slept through must still reach the transcript. Before assembly, because
+        // one she is going to ignore should not cost a memory read — and before the response
+        // policy, because that gate is a model call. Sleeping is strictly cheaper than waking.
+        services.AddSingleton<ITurnStage, SleepGateStage>();
+
         services.AddSingleton<ITurnStage, ContextAssemblyStage>();
 
         // After assembly, because deciding whether a message was meant for Lane needs the
@@ -115,6 +128,25 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<MonologueService>();
         services.AddSingleton<IMonologueScheduler>(sp => sp.GetRequiredService<MonologueService>());
         services.AddHostedService(sp => sp.GetRequiredService<MonologueService>());
+
+        return services;
+    }
+
+    /// <summary>
+    /// Gives Lane a metabolism: a token budget that accrues back over a rolling window, and
+    /// gets between her and a conversation once it runs out. Off by default, because a harness
+    /// that can decide on its own to ignore you is a surprising thing for a checkout to do.
+    /// </summary>
+    public static IServiceCollection AddLaneEnergy(
+        this IServiceCollection services, Action<EnergyOptions>? configure = null)
+    {
+        if (configure is not null) services.Configure(configure);
+
+        services.RemoveAll<IEnergyService>();
+
+        services.AddSingleton<EnergyService>();
+        services.AddSingleton<IEnergyService>(sp => sp.GetRequiredService<EnergyService>());
+        services.AddHostedService(sp => sp.GetRequiredService<EnergyService>());
 
         return services;
     }

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Lane.Audio.Voiceprints;
 using Lane.Core.Identity;
 using Lane.Core.Kernel;
 using Lane.Core.Messages;
@@ -7,8 +8,19 @@ using Microsoft.Extensions.Logging;
 
 namespace Lane.Audio;
 
-/// <summary>Which conversation an audio source belongs to, and who is speaking on it.</summary>
-public sealed record AudioBinding(AudioSourceId Source, SessionId Session, Participant Speaker);
+/// <summary>
+/// Which conversation an audio source belongs to, and who is speaking on it.
+///
+/// <paramref name="Attribution"/> is the difference between a Discord speaker and a
+/// microphone in a room. When it is <see cref="SpeakerAttribution.Known"/>, <paramref
+/// name="Speaker"/> is the answer; when it is <see cref="SpeakerAttribution.Diarized"/>,
+/// it is only the fallback for utterances the audio cannot place.
+/// </summary>
+public sealed record AudioBinding(
+    AudioSourceId Source,
+    SessionId Session,
+    Participant Speaker,
+    SpeakerAttribution Attribution = SpeakerAttribution.Known);
 
 /// <summary>
 /// Listens to every microphone at once and turns what it hears into messages.
@@ -17,25 +29,46 @@ public sealed record AudioBinding(AudioSourceId Source, SessionId Session, Parti
 /// sources bound to one session, so their words arrive as one ordered conversation through
 /// that session's pump — while a microphone bound elsewhere runs fully in parallel. v2
 /// could only ever hear Discord, and only through a stream type its ear was built around.
+///
+/// A source need not be one person, though. Discord hands over one stream per speaker and
+/// says who each one is; a microphone in a room hands over everybody at once and says
+/// nothing. Those arrive through <see cref="RegisterShared"/> instead, and who spoke is
+/// decided per utterance rather than settled at registration — see
+/// <see cref="ISpeakerAttributor"/>. Everything downstream of here is identical either way:
+/// a <see cref="Participant"/> on a message, which is all the kernel ever wanted.
 /// </summary>
 public sealed class AudioRouter(
     IAgentKernel kernel,
-    Func<ISpeechRecognizer> recognizerFactory,
+    Func<SpeakerAttribution, ISpeechRecognizer> recognizerFactory,
     IVoiceFloor floor,
-    ILogger<AudioRouter> log) : IAsyncDisposable
+    ILogger<AudioRouter> log,
+    ISpeakerAttributor? attributor = null) : IAsyncDisposable
 {
     private readonly ConcurrentDictionary<string, Listener> _listeners = new();
+
+    private readonly ISpeakerAttributor _attributor = attributor ?? NullSpeakerAttributor.Instance;
 
     private CancellationTokenSource _lifetime = new();
 
     public int ActiveSources => _listeners.Count;
 
     /// <summary>Starts listening to a source and attributing it to a person in a conversation.</summary>
-    public void Register(IAudioSource source, SessionId session, Participant speaker)
+    public void Register(IAudioSource source, SessionId session, Participant speaker) =>
+        Add(source, new AudioBinding(source.Id, session, speaker));
+
+    /// <summary>
+    /// Starts listening to a source that carries more than one person — a microphone in a
+    /// room rather than one person's headset — and works out who spoke each utterance.
+    ///
+    /// <paramref name="fallback"/> is who the words belong to when that cannot be worked
+    /// out: too short an utterance to place, or audio that arrived too late to examine.
+    /// </summary>
+    public void RegisterShared(IAudioSource source, SessionId session, Participant fallback) =>
+        Add(source, new AudioBinding(source.Id, session, fallback, SpeakerAttribution.Diarized));
+
+    private void Add(IAudioSource source, AudioBinding binding)
     {
         ArgumentNullException.ThrowIfNull(source);
-
-        AudioBinding binding = new(source.Id, session, speaker);
 
         Listener listener = new(source, binding);
 
@@ -47,8 +80,12 @@ public sealed class AudioRouter(
 
         listener.Task = Task.Run(() => ListenAsync(listener, _lifetime.Token), CancellationToken.None);
 
-        log.LogInformation("Listening to {Source} as {Speaker} in {Session}",
-            source.Id, speaker.DisplayName, session);
+        if (binding.Attribution == SpeakerAttribution.Diarized)
+            log.LogInformation("Listening to {Source} in {Session}, telling its speakers apart",
+                source.Id, binding.Session);
+        else
+            log.LogInformation("Listening to {Source} as {Speaker} in {Session}",
+                source.Id, binding.Speaker.DisplayName, binding.Session);
     }
 
     public async ValueTask UnregisterAsync(AudioSourceId id)
@@ -57,6 +94,10 @@ public sealed class AudioRouter(
 
         await listener.StopAsync().ConfigureAwait(false);
 
+        // Whatever was learned about "Guest-1" on this source is about to be true of
+        // somebody else, so it goes when the source does.
+        _attributor.Release(id);
+
         log.LogInformation("Stopped listening to {Source}", id);
     }
 
@@ -64,7 +105,7 @@ public sealed class AudioRouter(
     {
         using CancellationTokenSource linked = CancellationTokenSource.CreateLinkedTokenSource(ct, listener.Stop.Token);
 
-        await using ISpeechRecognizer recognizer = recognizerFactory();
+        await using ISpeechRecognizer recognizer = recognizerFactory(listener.Binding.Attribution);
 
         try
         {
@@ -93,21 +134,47 @@ public sealed class AudioRouter(
 
     private async Task SubmitAsync(AudioBinding binding, Transcript transcript, CancellationToken ct)
     {
-        log.LogInformation("[{Speaker}] heard: {Text}", binding.Speaker.DisplayName, transcript.Text);
+        Participant speaker = await AttributeAsync(binding, transcript, ct).ConfigureAwait(false);
+
+        log.LogInformation("[{Speaker}] heard: {Text}", speaker.DisplayName, transcript.Text);
 
         // Whoever was holding the floor has finished a sentence; anything Lane was saying
         // has already been cut off by the interim result that preceded this.
         floor.NoticeFinal(binding.Session);
 
         LaneMessage message = LaneMessage.User(
-            binding.Session, binding.Speaker, transcript.Text, DateTimeOffset.UtcNow);
+            binding.Session, speaker, transcript.Text, DateTimeOffset.UtcNow);
 
         await kernel.SubmitAsync(new InboundEvent
         {
             Session = binding.Session,
-            Author  = binding.Speaker,
+            Author  = speaker,
             Message = message
         }, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Who to write this line down as. A source with one person on it already knows, and
+    /// a failure to work it out falls back to that same answer rather than dropping the
+    /// words — something was said, and hearing it as the wrong person still beats not
+    /// hearing it at all.
+    /// </summary>
+    private async ValueTask<Participant> AttributeAsync(
+        AudioBinding binding, Transcript transcript, CancellationToken ct)
+    {
+        if (binding.Attribution != SpeakerAttribution.Diarized || transcript.Voice is not { } voice)
+            return binding.Speaker;
+
+        try
+        {
+            return await _attributor.AttributeAsync(binding, voice, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            log.LogError(ex, "Could not tell who spoke on {Source}", binding.Source);
+
+            return binding.Speaker;
+        }
     }
 
     public async ValueTask DisposeAsync()

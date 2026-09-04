@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Lane.Core.Energy;
 using Lane.Core.Identity;
 using Lane.Core.Memory;
 using Lane.Core.Messages;
@@ -57,6 +58,9 @@ public sealed record ToolContext
     public Participant? Requester { get; init; }
 
     public TurnKind Turn { get; init; } = TurnKind.Respond;
+
+    /// <summary>How worn out she is, so the registry can refuse an expensive call she cannot afford.</summary>
+    public EnergyTier Energy { get; init; } = EnergyTier.Rested;
 
     public MemoryContext Memory { get; init; } = new();
 

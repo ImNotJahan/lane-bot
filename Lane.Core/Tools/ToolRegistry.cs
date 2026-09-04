@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Lane.Core.Energy;
 using Lane.Core.Events;
 using Lane.Core.Identity;
 using Lane.Core.Sessions;
@@ -33,8 +34,12 @@ public sealed class ToolOptions
     public bool PreferStableSet { get; set; } = true;
 }
 
-/// <summary>Who is asking, and from where.</summary>
-public sealed record ToolScope(SessionDescriptor? Session, TurnKind Turn, Participant? Requester = null);
+/// <summary>Who is asking, from where, and with how much left in the tank.</summary>
+public sealed record ToolScope(
+    SessionDescriptor? Session,
+    TurnKind           Turn,
+    Participant?       Requester = null,
+    EnergyTier         Energy    = EnergyTier.Rested);
 
 /// <param name="Fingerprint">
 /// Stable hash of the advertised names and schemas. Requests carry it in their cache
@@ -61,6 +66,7 @@ public sealed class ToolRegistry : IToolRegistry
 {
     private readonly IReadOnlyList<IToolSource> _sources;
     private readonly ToolOptions _options;
+    private readonly EnergyOptions _energy;
     private readonly ILogger<ToolRegistry> _log;
     private readonly IEventBus _bus;
 
@@ -71,11 +77,13 @@ public sealed class ToolRegistry : IToolRegistry
         IEnumerable<IToolSource> sources,
         IOptions<ToolOptions> options,
         ILogger<ToolRegistry> log,
-        IEventBus? bus = null)
+        IEventBus? bus = null,
+        IOptions<EnergyOptions>? energy = null)
     {
         _bus     = bus ?? new NullEventBus();
         _sources = [.. sources];
         _options = options.Value;
+        _energy  = energy?.Value ?? new EnergyOptions();
         _log     = log;
 
         foreach (IToolSource source in _sources)
@@ -115,7 +123,7 @@ public sealed class ToolRegistry : IToolRegistry
 
         // Re-checked here on purpose. The advertised list is a hint to the model, not a
         // security boundary — a model can name a tool it was never offered.
-        ToolScope scope = new(context.Descriptor, context.Turn, context.Requester);
+        ToolScope scope = new(context.Descriptor, context.Turn, context.Requester, context.Energy);
 
         string? refusal = Gate(tool.Descriptor, scope, advertising: false);
 
@@ -167,6 +175,15 @@ public sealed class ToolRegistry : IToolRegistry
     {
         if (!IsAllowedByConfig(descriptor.Name, scope)) return "disabled by configuration";
 
+        // Tiredness is enforced only when a call arrives, never by withholding the tool.
+        // Hiding one would change ToolSet.Fingerprint, and with it the cache lineage of every
+        // request behind it — a prompt-cache miss bought in exchange for saving tokens, at
+        // exactly the moment she is trying to spend less, and flapping each time she crosses a
+        // threshold. Refusing costs one step that MaxToolCalls already bounds, and she is told
+        // why rather than left to wonder where the tool went.
+        if (!advertising && IsTooTiredFor(descriptor.Name, scope.Energy))
+            return "you are too tired for that right now";
+
         if (!descriptor.Availability.AllowedTurns.HasFlag(scope.Turn))
             return $"only available during {descriptor.Availability.AllowedTurns} turns";
 
@@ -187,6 +204,10 @@ public sealed class ToolRegistry : IToolRegistry
 
         return null;
     }
+
+    private bool IsTooTiredFor(string name, EnergyTier tier) =>
+        _energy.For(tier) is { DenyTools: { Count: > 0 } denied } &&
+        denied.Any(pattern => Matches(name, pattern));
 
     private bool IsAllowedByConfig(string name, ToolScope scope)
     {

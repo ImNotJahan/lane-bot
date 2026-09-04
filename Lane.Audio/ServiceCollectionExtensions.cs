@@ -1,7 +1,11 @@
+using Lane.Audio.Capture;
 using Lane.Audio.Recognition;
 using Lane.Audio.Synthesis;
+using Lane.Audio.Voiceprints;
 using Lane.Core.Agent;
+using Lane.Core.Identity;
 using Lane.Core.Kernel;
+using Lane.Core.Sessions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
@@ -25,6 +29,8 @@ public sealed class AudioSetupOptions
     public ElevenLabsOptions  Synthesis   { get; set; } = new();
     public FliteOptions       Flite       { get; set; } = new();
     public BargeInOptions     BargeIn     { get; set; } = new();
+    public VoiceprintOptions  Voiceprints { get; set; } = new();
+    public MicrophoneOptions  Microphone  { get; set; } = new();
 
     /// <summary>Voice, tempo and pitch. The same shape v2's speech settings had.</summary>
     public SpeechOptions Speech { get; set; } = new("MEJe6hPrI48Kt2lFuVe3");
@@ -84,15 +90,59 @@ public static class ServiceCollectionExtensions
         });
 
         // A recogniser per source, not one shared: each holds a connection and a session
-        // with the recognition service for as long as its speaker is talking.
-        services.AddSingleton<Func<ISpeechRecognizer>>(sp => () => new AzureSpeechRecognizer(
-            options.Recognition, sp.GetRequiredService<ILogger<AzureSpeechRecognizer>>()));
+        // with the recognition service for as long as its speaker is talking. Which kind
+        // depends on the source — one person's headset and a microphone in a room are
+        // different questions to ask the service, and asking the wrong one attributes a
+        // whole room to whoever the source was registered as.
+        services.AddSingleton<Func<SpeakerAttribution, ISpeechRecognizer>>(sp => attribution =>
+            attribution == SpeakerAttribution.Diarized
+                ? new DiarizingSpeechRecognizer(
+                    options.Recognition, sp.GetRequiredService<ILogger<DiarizingSpeechRecognizer>>())
+                : new AzureSpeechRecognizer(
+                    options.Recognition, sp.GetRequiredService<ILogger<AzureSpeechRecognizer>>()));
+
+        services.AddSingleton(options.Voiceprints);
+
+        // Without a voiceprint model, the people on one microphone are still told apart —
+        // they just stop being anybody once the call ends. Loading the model is what turns
+        // "two voices in this room" into "the voice that was here last week".
+        if (options.Voiceprints.Enabled)
+        {
+            services.TryAddSingleton<IVoiceEncoder>(sp => new OnnxVoiceEncoder(
+                options.Voiceprints, sp.GetRequiredService<ILogger<OnnxVoiceEncoder>>()));
+
+            services.TryAddSingleton<ISpeakerAttributor>(sp => new VoiceprintAttributor(
+                sp.GetRequiredService<IVoiceEncoder>(),
+                sp.GetRequiredService<IVoiceprintDirectory>(),
+                sp.GetRequiredService<IIdentityResolver>(),
+                options.Voiceprints,
+                sp.GetRequiredService<ILogger<VoiceprintAttributor>>()));
+        }
+        else
+        {
+            services.TryAddSingleton<ISpeakerAttributor>(sp => new LabelRosterAttributor(
+                sp.GetRequiredService<IIdentityResolver>(),
+                sp.GetRequiredService<ILogger<LabelRosterAttributor>>()));
+        }
 
         services.AddSingleton(sp => new AudioRouter(
             sp.GetRequiredService<IAgentKernel>(),
-            sp.GetRequiredService<Func<ISpeechRecognizer>>(),
+            sp.GetRequiredService<Func<SpeakerAttribution, ISpeechRecognizer>>(),
             sp.GetRequiredService<IVoiceFloor>(),
-            sp.GetRequiredService<ILogger<AudioRouter>>()));
+            sp.GetRequiredService<ILogger<AudioRouter>>(),
+            sp.GetRequiredService<ISpeakerAttributor>()));
+
+        services.AddSingleton(options.Microphone);
+
+        // The machine's own microphone, when it has been asked for. Registered shared: a
+        // microphone in a room is the case worth having, and one person's headset already
+        // has a socket.
+        if (options.Microphone.Enabled)
+            services.AddHostedService(sp => new MicrophoneService(
+                options.Microphone,
+                sp.GetRequiredService<AudioRouter>(),
+                sp.GetRequiredService<ISessionRegistry>(),
+                sp.GetRequiredService<ILogger<MicrophoneService>>()));
 
         services.AddSingleton<IAgentObserverFactory>(sp => new VoiceObserverFactory(
             sp.GetRequiredService<ISpeechSynthesizer>(),

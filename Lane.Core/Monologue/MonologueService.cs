@@ -1,6 +1,7 @@
 using System.Text;
 using Lane.Core.Agent;
 using Lane.Core.Context;
+using Lane.Core.Energy;
 using Lane.Core.Events;
 using Lane.Core.Identity;
 using Lane.Core.Memory;
@@ -40,6 +41,8 @@ public sealed class MonologueService : BackgroundService, IMonologueScheduler
     private readonly IEventBus              _bus;
     private readonly IServiceProvider       _services;
     private readonly MonologueOptions       _options;
+    private readonly IEnergyService         _energy;
+    private readonly EnergyOptions          _energyOptions;
     private readonly TimeProvider           _time;
     private readonly ILogger<MonologueService> _log;
 
@@ -64,6 +67,8 @@ public sealed class MonologueService : BackgroundService, IMonologueScheduler
         IEventBus bus,
         IServiceProvider services,
         IOptions<MonologueOptions> options,
+        IEnergyService energy,
+        IOptions<EnergyOptions> energyOptions,
         ILogger<MonologueService> log,
         TimeProvider? time = null)
     {
@@ -78,6 +83,8 @@ public sealed class MonologueService : BackgroundService, IMonologueScheduler
         _bus        = bus;
         _services   = services;
         _options    = options.Value;
+        _energy     = energy;
+        _energyOptions = energyOptions.Value;
         _time       = time ?? TimeProvider.System;
         _log        = log;
     }
@@ -147,6 +154,17 @@ public sealed class MonologueService : BackgroundService, IMonologueScheduler
             {
                 if (!await WaitForNextAsync(stoppingToken).ConfigureAwait(false)) continue;
 
+                // Asleep is asleep: no thoughts, and no bill for having them. Scheduling for
+                // the moment accrual will wake her — rather than for the usual cadence — means
+                // she starts thinking again when she is actually rested, and going through
+                // Schedule keeps the Min/Max clamp and still publishes a tick, so a sleeping
+                // loop reads as sleeping rather than as stuck.
+                if (_energy.Current.Asleep)
+                {
+                    Schedule(_energy.TimeUntilRested ?? _options.Interval, "asleep");
+                    continue;
+                }
+
                 await ThinkAsync(stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -189,6 +207,8 @@ public sealed class MonologueService : BackgroundService, IMonologueScheduler
     {
         ILanguageModel model = _models.Get(ModelRole.Monologue);
 
+        EnergyTierOptions? tired = _energyOptions.For(_energy.Current.Tier);
+
         _thinking = true;
 
         try
@@ -225,8 +245,11 @@ public sealed class MonologueService : BackgroundService, IMonologueScheduler
                 },
                 Lane            = lane,
                 Session         = null,
-                Budget          = _options.Budget,
-                MaxOutputTokens = _options.MaxOutputTokens,
+
+                // A tired thought should be a short thought, on the same ladder her replies use.
+                Budget          = tired?.Scale(_options.Budget) ?? _options.Budget,
+                MaxOutputTokens = tired?.Scale(_options.MaxOutputTokens, 128) ?? _options.MaxOutputTokens,
+
                 CacheLineage    = $"monologue:{model.Descriptor.InstanceId}"
             }, ct).ConfigureAwait(false);
 
@@ -238,14 +261,25 @@ public sealed class MonologueService : BackgroundService, IMonologueScheduler
         }
 
         // Nothing rescheduled during the thought — she did not use the tool — so fall back
-        // to the configured cadence.
+        // to the configured cadence, stretched by however tired she is. Only the fallback:
+        // a cadence she chose for herself with schedule_next_thought is a decision, and
+        // second-guessing it here would make that tool mean something different when tired.
         lock (_scheduleLock)
         {
             if (_nextThoughtAt is { } at && at > _time.GetUtcNow()) return;
         }
 
-        Schedule(_options.Interval, "default cadence");
+        Schedule(Stretch(_options.Interval), "default cadence");
     }
+
+    /// <summary>
+    /// The cadence, slowed by tiredness. Still passed through <see cref="Schedule"/>, so
+    /// <c>MaxInterval</c> remains the last word on how long she can go without a thought.
+    /// </summary>
+    private TimeSpan Stretch(TimeSpan interval) =>
+        _energyOptions.For(_energy.Current.Tier) is { MonologueScale: > 0 and var scale }
+            ? interval * scale
+            : interval;
 
     private async Task RecordAsync(AgentRunResult result, MemoryContext context)
     {

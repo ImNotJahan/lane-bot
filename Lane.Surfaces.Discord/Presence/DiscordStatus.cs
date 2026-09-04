@@ -13,7 +13,10 @@ namespace Lane.Surfaces.Discord.Presence;
 public enum DiscordStatusSlot
 {
     /// <summary>Her emoticon, from <c>PresenceChanged</c>.</summary>
-    Face = 0
+    Face = 0,
+
+    /// <summary>How worn out she is, from <c>EnergyChanged</c>. Empty while she is rested.</summary>
+    Sleep = 10
 }
 
 /// <summary>

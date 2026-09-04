@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Security.Cryptography;
 using System.Text;
@@ -32,15 +31,11 @@ public sealed class LinkIdentityTool(
     /// <summary>Long enough to switch device or app, short enough that a code left lying about expires.</summary>
     private static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(10);
 
-    private const int MaxPending = 32;
-
-    // No ambiguous glyphs: these are read off one screen and typed into another, and "was
-    // that an O or a zero" is the whole failure mode.
-    private const string Alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-
-    private readonly ConcurrentDictionary<string, Claim> _pending = new(StringComparer.Ordinal);
-
-    private sealed record Claim(ParticipantId Account, string DisplayName, DateTimeOffset Expires);
+    /// <summary>
+    /// Keyed on the account so asking twice replaces rather than accumulates; the display
+    /// name rides along because the claiming half needs it to resolve the issuer.
+    /// </summary>
+    private readonly ProofCodes<ParticipantId, string> _pending = new(time, Lifetime);
 
     public sealed record Args(
         [property: Description(
@@ -77,8 +72,6 @@ public sealed class LinkIdentityTool(
             return ToolResult.Error(
                 "Not here — anyone reading this channel could use the code. Ask me one to one.");
 
-        Prune();
-
         return string.IsNullOrWhiteSpace(args.Code)
             ? Issue(requester)
             : await ClaimAsync(args.Code, requester, ct).ConfigureAwait(false);
@@ -86,17 +79,8 @@ public sealed class LinkIdentityTool(
 
     private ToolResult Issue(Participant requester)
     {
-        // Each account may have one code outstanding, so asking twice replaces rather than
-        // accumulates — otherwise a person who mistyped once leaves a live code behind them.
-        foreach ((string old, Claim claim) in _pending)
-            if (claim.Account == requester.Id) _pending.TryRemove(old, out _);
-
-        if (_pending.Count >= MaxPending)
+        if (_pending.Issue(requester.Id, requester.DisplayName) is not { } code)
             return ToolResult.Error("Too many links are part-way through. Try again in a few minutes.");
-
-        string code = NewCode();
-
-        _pending[code] = new Claim(requester.Id, requester.DisplayName, time.GetUtcNow() + Lifetime);
 
         log.LogInformation("Issued an identity link code to {Account}", requester.Id);
 
@@ -107,20 +91,16 @@ public sealed class LinkIdentityTool(
 
     private async ValueTask<ToolResult> ClaimAsync(string code, Participant claimant, CancellationToken ct)
     {
-        string normalised = Normalise(code);
-
-        if (!_pending.TryGetValue(normalised, out Claim? claim))
+        // Consumed whatever happens next, including the refusals below: a code that survives
+        // a failed attempt is one somebody else can still try.
+        if (!_pending.TryRedeem(code, out ParticipantId account, out string displayName))
             return ToolResult.Error("That is not a code I gave out, or it has expired. Ask for a new one.");
 
-        if (claim.Account == claimant.Id)
+        if (account == claimant.Id)
             return ToolResult.Error(
                 "That is the account the code was issued to. Say it on the other one, which is the whole point.");
 
-        // Single use, and consumed whatever happens next: a code that survives a failed
-        // attempt is one somebody else can still try.
-        _pending.TryRemove(normalised, out _);
-
-        string? issuerGlobal   = resolver.Resolve(claim.Account, claim.DisplayName).GlobalUserId;
+        string? issuerGlobal   = resolver.Resolve(account, displayName).GlobalUserId;
         string? claimantGlobal = claimant.GlobalUserId;
 
         if (issuerGlobal is not null && claimantGlobal is not null)
@@ -138,20 +118,20 @@ public sealed class LinkIdentityTool(
 
         string globalId = issuerGlobal ?? claimantGlobal ?? Mint(claimant.DisplayName);
 
-        await directory.LinkAsync(globalId, [claim.Account, claimant.Id], ct).ConfigureAwait(false);
+        await directory.LinkAsync(globalId, [account, claimant.Id], ct).ConfigureAwait(false);
 
         // A name chosen before the link was stored against the account; carry it onto the
         // person, or "call me Jax" quietly stops working the moment they link a second
         // account. The claimant's wins, since that is the account they are speaking from.
         string? chosen = directory.NameFor(claimant.StableKey)
-                      ?? directory.NameFor(issuerGlobal ?? claim.Account.ToString());
+                      ?? directory.NameFor(issuerGlobal ?? account.ToString());
 
         if (chosen is not null && directory.NameFor(globalId) is null)
             await directory.SetNameAsync(globalId, chosen, ct).ConfigureAwait(false);
 
-        log.LogInformation("Linked {A} and {B} as {GlobalId}", claim.Account, claimant.Id, globalId);
+        log.LogInformation("Linked {A} and {B} as {GlobalId}", account, claimant.Id, globalId);
 
-        string summary = $"{claim.DisplayName} ({claim.Account}) and {claimant.DisplayName} ({claimant.Id})";
+        string summary = $"{displayName} ({account}) and {claimant.DisplayName} ({claimant.Id})";
 
         // Participants are resolved as each message arrives, so the one being answered right
         // now still carries the old id. Saying so beats her claiming a change that the very
@@ -198,37 +178,4 @@ public sealed class LinkIdentityTool(
         return slug.Length == 0 ? "person" : slug;
     }
 
-    private string NewCode()
-    {
-        string code;
-
-        do
-        {
-            code = RandomNumberGenerator.GetString(Alphabet, 8);
-        }
-        while (_pending.ContainsKey(code));
-
-        return code[..4] + "-" + code[4..];
-    }
-
-    /// <summary>Case, spacing and the hyphen are all things a person retypes differently.</summary>
-    private static string Normalise(string code)
-    {
-        StringBuilder sb = new();
-
-        foreach (char c in code.ToUpperInvariant())
-            if (char.IsAsciiLetterOrDigit(c)) sb.Append(c);
-
-        string bare = sb.ToString();
-
-        return bare.Length == 8 ? bare[..4] + "-" + bare[4..] : bare;
-    }
-
-    private void Prune()
-    {
-        DateTimeOffset now = time.GetUtcNow();
-
-        foreach ((string code, Claim claim) in _pending)
-            if (claim.Expires <= now) _pending.TryRemove(code, out _);
-    }
 }
