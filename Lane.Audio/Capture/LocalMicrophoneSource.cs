@@ -40,6 +40,14 @@ public sealed class MicrophoneOptions
     public bool ShowInTui { get; set; }
 
     /// <summary>
+    /// How loud the room has to be before she listens to it at all.
+    ///
+    /// Off, a microphone left open in a house hears the next room, the television and the
+    /// phone call upstairs, and answers all of them. See <see cref="NoiseGate"/>.
+    /// </summary>
+    public NoiseGateOptions NoiseGate { get; set; } = new();
+
+    /// <summary>
     /// Ignore the room while Lane is speaking into it.
     ///
     /// A microphone and a speaker in one room hear each other. Off, she interrupts herself

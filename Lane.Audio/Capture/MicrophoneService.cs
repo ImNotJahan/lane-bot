@@ -78,24 +78,17 @@ public sealed class MicrophoneService(
                 "Lane",
                 _log));
 
-            // Registered through the gate rather than raw: a speaker answering into the
-            // same room the microphone is sitting in is a loop, and she talks over herself
-            // out of it. Attaching the mouth above is what creates that loop, so the two
-            // belong together.
-            IAudioSource ear = options.SuppressEcho
-                ? new EchoGate(source, floor, id, options.EchoTail, _log)
-                : source;
-
             // Whoever cannot be placed falls back to this rather than being dropped. It is
             // deliberately not a person: an unplaceable line belongs to the room.
-            router.RegisterShared(ear, id,
+            router.RegisterShared(Listen(source, id), id,
                 new Participant(new ParticipantId(Surface, "room"), "the room"));
 
             _source = source;
 
             _log.LogInformation(
-                "The room is listening on {Session}, answering out loud{Echo}{Deaf}",
+                "The room is listening on {Session}{Threshold}, answering out loud{Echo}{Deaf}",
                 id,
+                options.NoiseGate.Enabled ? $" to anything above {options.NoiseGate.MinimumLevel:0.0} dBFS" : "",
                 options.ShowInTui && echo is not null ? " and on screen" : "",
                 options.SuppressEcho ? " and ignoring itself while it does" : "");
         }
@@ -108,6 +101,29 @@ public sealed class MicrophoneService(
         }
 
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// What recognition actually gets to hear, which is not simply the microphone.
+    ///
+    /// Both gates hand on silence rather than withholding frames, so they compose: audio
+    /// goes through as itself only where the room was loud enough to be talking to her and
+    /// Lane was not talking over it.
+    ///
+    /// Innermost first, and the order is the reasoning. The noise gate goes closest to the
+    /// microphone because its question is about the room — how loud is it — and it wants the
+    /// room as it actually sounded. The echo gate goes outside it, because what it silences
+    /// is not the room at all: attaching the mouth above is what puts Lane's own voice into
+    /// this microphone in the first place, and without it she interrupts herself on her own
+    /// first clause.
+    /// </summary>
+    internal IAudioSource Listen(IAudioSource source, SessionId id)
+    {
+        if (options.NoiseGate.Enabled) source = new NoiseGate(source, options.NoiseGate, _log);
+
+        if (options.SuppressEcho) source = new EchoGate(source, floor, id, options.EchoTail, _log);
+
+        return source;
     }
 
     public async Task StopAsync(CancellationToken ct)
