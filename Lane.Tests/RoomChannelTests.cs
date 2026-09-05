@@ -180,7 +180,7 @@ public sealed class RoomChannelTests
         FakeEcho echo = new();
 
         MicrophoneService service = new(
-            options, router, harness.Sessions, NullLoggerFactory.Instance, echo);
+            options, router, harness.Sessions, new NoVoiceFloor(), NullLoggerFactory.Instance, echo);
 
         await service.StartAsync(TestContext.Current.CancellationToken);
 

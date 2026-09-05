@@ -253,8 +253,8 @@ public sealed class IdentityNameTests
         IdentityDirectory directory = Directory();
         IdentityResolver  resolver = Resolver(directory);
 
-        LinkIdentityTool link = new(resolver, directory, TimeProvider.System,
-            NullLogger<LinkIdentityTool>.Instance);
+        LinkIdentityTool link = new(resolver, directory, new IdentityToolOptions(),
+            TimeProvider.System, NullLogger<LinkIdentityTool>.Instance);
 
         await Invoke(Tool(directory), new { name = "Jax" },
             Context(Person(Terminal, "jahan", "jahan", resolver)));

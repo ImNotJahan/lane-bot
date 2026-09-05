@@ -142,6 +142,11 @@ public static class ServiceCollectionExtensions
                 options.Microphone,
                 sp.GetRequiredService<AudioRouter>(),
                 sp.GetRequiredService<ISessionRegistry>(),
+
+                // The same floor the barge-in path uses, because it is the barge-in path
+                // this is keeping her own voice out of.
+                sp.GetRequiredService<IVoiceFloor>(),
+
                 sp.GetRequiredService<ILoggerFactory>(),
 
                 // Optional, and resolved here rather than required: whether anything is

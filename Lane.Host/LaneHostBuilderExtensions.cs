@@ -347,6 +347,7 @@ public static class LaneHostBuilderExtensions
         ToolsSetupOptions setup = new();
         section.GetSection("Books").Bind(setup.Books);
         section.GetSection("Search").Bind(setup.Search);
+        section.GetSection("Identity").Bind(setup.Identity);
 
         // Resolved here, at composition, rather than read from inside the tool. A part that
         // fetches its own credentials can only ever have one set of them — which is exactly

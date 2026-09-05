@@ -20,11 +20,16 @@ namespace Lane.Tools.Identity;
 /// "they both say they are Jahan" would be that guess with extra steps. It cannot state
 /// somebody else's account either, so the worst a model can do with this tool is offer a
 /// code to the person in front of it.
-/// </summary>
+///
+/// The code can be turned off — see <see cref="IdentityToolOptions.RequireProof"/> — and
+/// then being present on both accounts is the whole of the proof. Everything else here is
+/// unchanged, including the part that matters most: each half still only ever acts on the
+/// account actually speaking, so no setting makes the model able to assert a link.
 [LaneTool]
 public sealed class LinkIdentityTool(
     IIdentityResolver resolver,
     IIdentityDirectory directory,
+    IdentityToolOptions options,
     TimeProvider time,
     ILogger<LinkIdentityTool> log) : Tool<LinkIdentityTool.Args>
 {
@@ -44,11 +49,16 @@ public sealed class LinkIdentityTool(
 
     protected override string Name => "link_identity";
 
-    protected override string Description =>
-        "Join two accounts belonging to the same person, so you remember them as one across surfaces. " +
-        "Call it with no code to be given one, then call it again with that code when they repeat it " +
-        "to you on their other account. Only ever links whoever is speaking to you now — you cannot " +
-        "link somebody on their behalf, and you should not offer it unless they ask.";
+    protected override string Description => options.RequireProof
+        ? "Join two accounts belonging to the same person, so you remember them as one across surfaces. " +
+          "Call it with no code to be given one, then call it again with that code when they repeat it " +
+          "to you on their other account. Only ever links whoever is speaking to you now — you cannot " +
+          "link somebody on their behalf, and you should not offer it unless they ask."
+
+        : "Join two accounts belonging to the same person, so you remember them as one across surfaces. " +
+          "Call it with nothing on one account, then call it again — still with nothing — when they say " +
+          "so on their other one. Only ever links whoever is speaking to you now — you cannot link " +
+          "somebody on their behalf, and you should not offer it unless they ask.";
 
     protected override ToolSafety Safety => ToolSafety.Mutating;
 
@@ -70,11 +80,21 @@ public sealed class LinkIdentityTool(
 
         if (context.Descriptor?.IsDirect != true)
             return ToolResult.Error(
-                "Not here — anyone reading this channel could use the code. Ask me one to one.");
+                "Not here — anyone reading this channel could claim it was them. Ask me one to one.");
 
-        return string.IsNullOrWhiteSpace(args.Code)
-            ? Issue(requester)
-            : await ClaimAsync(args.Code, requester, ct).ConfigureAwait(false);
+        // Which half this is. A code settles it; without one there is nothing to go on but
+        // order, so a link already waiting is one this account is completing.
+        //
+        // Which is also the sharpest edge of trusting people: somebody asking to start their
+        // own link, while another is outstanding, finishes that one instead. Two accounts
+        // that asked in turn get joined whether or not they are the same person. There is no
+        // fixing that from in here — it is what the code was for.
+        bool claiming = !string.IsNullOrWhiteSpace(args.Code)
+                     || (!options.RequireProof && _pending.Outstanding(requester.Id) > 0);
+
+        return claiming
+            ? await ClaimAsync(args.Code, requester, ct).ConfigureAwait(false)
+            : Issue(requester);
     }
 
     private ToolResult Issue(Participant requester)
@@ -82,7 +102,14 @@ public sealed class LinkIdentityTool(
         if (_pending.Issue(requester.Id, requester.DisplayName) is not { } code)
             return ToolResult.Error("Too many links are part-way through. Try again in a few minutes.");
 
-        log.LogInformation("Issued an identity link code to {Account}", requester.Id);
+        log.LogInformation("Expecting {Account} on another account", requester.Id);
+
+        // Staged either way — being on both accounts is what is left of the proof once the
+        // code goes. What changes is only whether there is something to carry across.
+        if (!options.RequireProof)
+            return ToolResult.Ok(
+                $"Right. Within the next {Lifetime.TotalMinutes:0} minutes, say so on your other " +
+                "account — one to one there as well — and I will take your word for it and join them.");
 
         return ToolResult.Ok(
             $"Code {code}, good for {Lifetime.TotalMinutes:0} minutes. Tell them to say it to me on their " +
@@ -93,7 +120,7 @@ public sealed class LinkIdentityTool(
     {
         // Consumed whatever happens next, including the refusals below: a code that survives
         // a failed attempt is one somebody else can still try.
-        if (!_pending.TryRedeem(code, out ParticipantId account, out string displayName))
+        if (!Redeem(code, claimant, out ParticipantId account, out string displayName))
             return ToolResult.Error("That is not a code I gave out, or it has expired. Ask for a new one.");
 
         if (account == claimant.Id)
@@ -178,4 +205,19 @@ public sealed class LinkIdentityTool(
         return slug.Length == 0 ? "person" : slug;
     }
 
+    /// <summary>
+    /// Turns whatever the claiming half was given into the account it stands for.
+    ///
+    /// A code is looked up as a code in either mode, so one already issued still works after
+    /// the setting changes underneath it. Only the empty-handed case differs.
+    /// </summary>
+    private bool Redeem(string code, Participant claimant, out ParticipantId account, out string displayName)
+    {
+        if (options.RequireProof || !string.IsNullOrWhiteSpace(code))
+            return _pending.TryRedeem(code, out account, out displayName);
+
+        // Only reached with something waiting, since that is what decided this was the
+        // claiming half at all. The count is still checked rather than assumed.
+        return _pending.TryRedeemSole(claimant.Id, out account, out displayName, out _);
+    }
 }

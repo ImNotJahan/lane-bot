@@ -18,11 +18,16 @@ namespace Lane.Audio.Capture;
 /// channel is not half-working, it is a conversation Lane holds entirely to herself — she
 /// hears the room, answers it, writes the answer to memory, and drops it. Anything that
 /// stops one here should stop the other.
+///
+/// Attaching both is also what makes the room a feedback loop, so the ear goes on behind an
+/// <see cref="EchoGate"/>: without it her own answer comes back through the microphone,
+/// takes the floor off her mid-sentence, and is written down as something the room said.
 /// </summary>
 public sealed class MicrophoneService(
     MicrophoneOptions options,
     AudioRouter router,
     ISessionRegistry sessions,
+    IVoiceFloor floor,
     ILoggerFactory loggers,
     IRoomEcho? echo = null) : IHostedService
 {
@@ -73,15 +78,26 @@ public sealed class MicrophoneService(
                 "Lane",
                 _log));
 
+            // Registered through the gate rather than raw: a speaker answering into the
+            // same room the microphone is sitting in is a loop, and she talks over herself
+            // out of it. Attaching the mouth above is what creates that loop, so the two
+            // belong together.
+            IAudioSource ear = options.SuppressEcho
+                ? new EchoGate(source, floor, id, options.EchoTail, _log)
+                : source;
+
             // Whoever cannot be placed falls back to this rather than being dropped. It is
             // deliberately not a person: an unplaceable line belongs to the room.
-            router.RegisterShared(source, id,
+            router.RegisterShared(ear, id,
                 new Participant(new ParticipantId(Surface, "room"), "the room"));
 
             _source = source;
 
-            _log.LogInformation("The room is listening on {Session}, answering out loud{Echo}",
-                id, options.ShowInTui && echo is not null ? " and on screen" : "");
+            _log.LogInformation(
+                "The room is listening on {Session}, answering out loud{Echo}{Deaf}",
+                id,
+                options.ShowInTui && echo is not null ? " and on screen" : "",
+                options.SuppressEcho ? " and ignoring itself while it does" : "");
         }
         catch (Exception ex)
         {

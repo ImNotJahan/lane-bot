@@ -31,8 +31,13 @@ public sealed class IdentityLinkTests
     private static IdentityResolver Resolver(IIdentityDirectory links, params (string Person, string[] Accounts)[] configured) =>
         new(configured.ToDictionary(c => c.Person, c => (IReadOnlyList<string>)c.Accounts), null, links);
 
-    private static LinkIdentityTool Tool(IIdentityResolver resolver, IIdentityDirectory links, TimeProvider? time = null) =>
-        new(resolver, links, time ?? TimeProvider.System, NullLogger<LinkIdentityTool>.Instance);
+    private static LinkIdentityTool Tool(
+        IIdentityResolver resolver,
+        IIdentityDirectory links,
+        TimeProvider? time = null,
+        bool proof = true) =>
+        new(resolver, links, new IdentityToolOptions { RequireProof = proof },
+            time ?? TimeProvider.System, NullLogger<LinkIdentityTool>.Instance);
 
     private static Participant Person(SurfaceId surface, string local, string name, IIdentityResolver resolver) =>
         resolver.Resolve(new ParticipantId(surface, local), name);
@@ -60,6 +65,93 @@ public sealed class IdentityLinkTests
         Assert.True(match.Success, $"No code in: {text}");
 
         return match.Value;
+    }
+
+    // ---- taking people at their word ---------------------------------------
+
+    [Fact]
+    public async Task With_proof_off_the_two_accounts_join_without_a_code()
+    {
+        // The trust-based setting. What goes is the code; what stays is that each half only
+        // ever acts on the account actually speaking, so this is still two people-shaped
+        // acts on two channels rather than the model asserting a link.
+        IdentityDirectory links = Links();
+        IdentityResolver  resolver = Resolver(links);
+        LinkIdentityTool  tool = Tool(resolver, links, proof: false);
+
+        Participant onDiscord  = Person(Discord, "2313", "Jahan", resolver);
+        Participant onTerminal = Person(Terminal, "jahan", "jahan", resolver);
+
+        ToolResult issued = await Invoke(tool, new { }, Context(onDiscord));
+
+        Assert.False(issued.IsError);
+        Assert.DoesNotMatch("[A-Z0-9]{4}-[A-Z0-9]{4}", issued.Text);
+
+        // The same empty call, on the other account: nothing was carried across but the
+        // person themselves.
+        ToolResult claimed = await Invoke(tool, new { }, Context(onTerminal));
+
+        Assert.False(claimed.IsError);
+
+        Assert.Equal(
+            Person(Discord, "2313", "Jahan", resolver).StableKey,
+            Person(Terminal, "jahan", "jahan", resolver).StableKey);
+    }
+
+    [Fact]
+    public async Task With_proof_off_asking_twice_on_one_account_still_only_stages_a_link()
+    {
+        // The second empty call has to be read as "start again", not as the other half:
+        // otherwise asking twice out of impatience links an account to itself.
+        IdentityDirectory links = Links();
+        IdentityResolver  resolver = Resolver(links);
+        LinkIdentityTool  tool = Tool(resolver, links, proof: false);
+
+        Participant onDiscord = Person(Discord, "2313", "Jahan", resolver);
+
+        await Invoke(tool, new { }, Context(onDiscord));
+
+        ToolResult again = await Invoke(tool, new { }, Context(onDiscord));
+
+        Assert.False(again.IsError);
+        Assert.Null(Person(Discord, "2313", "Jahan", resolver).GlobalUserId);
+    }
+
+    [Fact]
+    public async Task With_proof_off_the_next_account_to_ask_finishes_the_link_that_is_waiting()
+    {
+        // The sharp edge of the setting, written down because it is the reason not to use it
+        // anywhere strangers can reach her. With no code there is nothing to tell two empty
+        // calls apart but their order, so somebody asking to start their own link while one
+        // is outstanding finishes that one instead — and the two accounts are joined whether
+        // or not they belong to the same person. That is what the code was for.
+        IdentityDirectory links = Links();
+        IdentityResolver  resolver = Resolver(links);
+        LinkIdentityTool  tool = Tool(resolver, links, proof: false);
+
+        await Invoke(tool, new { }, Context(Person(Discord, "2313", "Jahan", resolver)));
+
+        ToolResult second = await Invoke(tool, new { }, Context(Person(Terminal, "someone", "Someone Else", resolver)));
+
+        Assert.False(second.IsError);
+
+        Assert.Equal(
+            Person(Discord, "2313", "Jahan", resolver).StableKey,
+            Person(Terminal, "someone", "Someone Else", resolver).StableKey);
+    }
+
+    [Fact]
+    public async Task With_proof_off_a_code_already_issued_still_works()
+    {
+        // The setting can change under a code that is already in somebody's hand, and having
+        // it stop working would be a puzzle nobody could diagnose.
+        IdentityDirectory links = Links();
+        IdentityResolver  resolver = Resolver(links);
+
+        ToolResult issued = await Invoke(
+            Tool(resolver, links), new { }, Context(Person(Discord, "2313", "Jahan", resolver)));
+
+        Assert.Contains("-", CodeIn(issued.Text));
     }
 
     // ---- the handshake -----------------------------------------------------

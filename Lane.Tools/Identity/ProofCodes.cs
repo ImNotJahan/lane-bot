@@ -1,6 +1,4 @@
 using System.Collections.Concurrent;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace Lane.Tools.Identity;
 
@@ -15,19 +13,24 @@ namespace Lane.Tools.Identity;
 ///
 /// Shared between linking an account and claiming a voice because the mechanism is
 /// identical, and the details it gets right are the sort that quietly rot in a second copy:
-/// codes single-use and consumed even by a failed attempt, one outstanding per claimant, no
-/// glyphs that get misread, and a normalisation forgiving enough that a code retyped without
-/// the hyphen — or said out loud and transcribed — still works.
+/// codes single-use and consumed even by a failed attempt, one outstanding per claimant, and
+/// a lookup forgiving enough that a code retyped differently — or said out loud and
+/// transcribed — still finds its way home.
+///
+/// What the code <em>looks like</em> is not shared, because that depends on how it travels:
+/// see <see cref="ProofCodeShape"/>.
 /// </summary>
 /// <typeparam name="TKey">Who asked, for the purpose of replacing their previous code.</typeparam>
 /// <typeparam name="TSubject">What the code stands for once redeemed.</typeparam>
-internal sealed class ProofCodes<TKey, TSubject>(TimeProvider time, TimeSpan lifetime, int capacity = 32)
+internal sealed class ProofCodes<TKey, TSubject>(
+    TimeProvider time,
+    TimeSpan lifetime,
+    ProofCodeShape? shape = null,
+    int capacity = 32)
     where TKey : notnull
     where TSubject : notnull
 {
-    // No ambiguous glyphs: these are read off one screen and typed — or said out loud —
-    // into another, and "was that an O or a zero" is the whole failure mode.
-    private const string Alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    private readonly ProofCodeShape _shape = shape ?? ProofCodeShape.Typed;
 
     private readonly ConcurrentDictionary<string, Claim> _pending = new(StringComparer.Ordinal);
 
@@ -50,9 +53,17 @@ internal sealed class ProofCodes<TKey, TSubject>(TimeProvider time, TimeSpan lif
 
         if (_pending.Count >= capacity) return null;
 
-        string code = NewCode();
+        // Two forms, and the difference matters: one is shown to a person, the other is what
+        // comes back after a keyboard or a microphone has had its way with it.
+        string code;
 
-        _pending[code] = new Claim(key, subject, time.GetUtcNow() + lifetime);
+        do
+        {
+            code = _shape.New();
+        }
+        while (_pending.ContainsKey(_shape.Key(code)));
+
+        _pending[_shape.Key(code)] = new Claim(key, subject, time.GetUtcNow() + lifetime);
 
         return code;
     }
@@ -66,7 +77,7 @@ internal sealed class ProofCodes<TKey, TSubject>(TimeProvider time, TimeSpan lif
     {
         Prune();
 
-        if (_pending.TryRemove(Normalise(code), out Claim? claim))
+        if (_pending.TryRemove(_shape.Key(code), out Claim? claim))
         {
             (key, subject) = (claim.Key, claim.Subject);
             return true;
@@ -76,33 +87,50 @@ internal sealed class ProofCodes<TKey, TSubject>(TimeProvider time, TimeSpan lif
         return false;
     }
 
-    private string NewCode()
+    /// <summary>How many claims are waiting that <paramref name="exclude"/> did not stage.</summary>
+    public int Outstanding(TKey exclude)
     {
-        string code;
+        Prune();
 
-        do
-        {
-            code = RandomNumberGenerator.GetString(Alphabet, 8);
-        }
-        while (_pending.ContainsKey(code));
-
-        return code[..4] + "-" + code[4..];
+        return _pending.Count(pending =>
+            !EqualityComparer<TKey>.Default.Equals(pending.Value.Key, exclude));
     }
 
     /// <summary>
-    /// Case, spacing and the hyphen are all things a person retypes differently — and a code
-    /// said out loud comes back with none of them.
+    /// Redeems the one claim outstanding, for when there is no code to present — see
+    /// <see cref="IdentityToolOptions.RequireProof"/>.
+    ///
+    /// Claims held by <paramref name="exclude"/> are passed over, because the caller's own
+    /// staged claim is never the one they are completing; that is what lets a tool tell its
+    /// two halves apart when neither carries a code.
+    ///
+    /// Refuses when more than one is in flight rather than picking. Without a code there is
+    /// nothing to distinguish them by, and guessing would attach one person's account — or
+    /// voice — to another's, which is the exact harm the code exists to prevent and the one
+    /// thing trusting people does not make acceptable. <paramref name="outstanding"/> says
+    /// how many were in the running so the caller can explain itself.
     /// </summary>
-    public static string Normalise(string code)
+    public bool TryRedeemSole(TKey exclude, out TKey key, out TSubject subject, out int outstanding)
     {
-        StringBuilder sb = new();
+        Prune();
 
-        foreach (char c in code.ToUpperInvariant())
-            if (char.IsAsciiLetterOrDigit(c)) sb.Append(c);
+        List<string> candidates =
+        [
+            .. _pending
+                .Where(pending => !EqualityComparer<TKey>.Default.Equals(pending.Value.Key, exclude))
+                .Select(pending => pending.Key)
+        ];
 
-        string bare = sb.ToString();
+        outstanding = candidates.Count;
 
-        return bare.Length == 8 ? bare[..4] + "-" + bare[4..] : bare;
+        if (outstanding == 1 && _pending.TryRemove(candidates[0], out Claim? claim))
+        {
+            (key, subject) = (claim.Key, claim.Subject);
+            return true;
+        }
+
+        (key, subject) = (default!, default!);
+        return false;
     }
 
     private void Prune()

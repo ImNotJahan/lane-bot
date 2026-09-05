@@ -39,6 +39,25 @@ public sealed class MicrophoneOptions
     /// </summary>
     public bool ShowInTui { get; set; }
 
+    /// <summary>
+    /// Ignore the room while Lane is speaking into it.
+    ///
+    /// A microphone and a speaker in one room hear each other. Off, she interrupts herself
+    /// on her own first clause and the rest of her sentence comes back as something the room
+    /// said — see <see cref="EchoGate"/>. On, nobody can interrupt her through this
+    /// microphone either, which is the price of not having acoustic echo cancellation.
+    /// </summary>
+    public bool SuppressEcho { get; set; } = true;
+
+    /// <summary>
+    /// How long after she stops talking to keep ignoring the room.
+    ///
+    /// Covers the sound still on its way out of the speakers when playback ends, and the
+    /// audio already captured but not yet read. Too short and the last syllable of her own
+    /// sentence gets through; too long and the first word of the reply to it does not.
+    /// </summary>
+    public TimeSpan EchoTail { get; set; } = TimeSpan.FromMilliseconds(500);
+
     /// <summary>What the speakers are handed. Playback quality, not recognition quality.</summary>
     public int OutputSampleRate { get; set; } = 48000;
 

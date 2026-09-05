@@ -1,5 +1,6 @@
 using Lane.Core;
 using Lane.Core.Presence;
+using Lane.Tools.Identity;
 using Lane.Tools.Reading;
 using Lane.Tools.Web;
 using Microsoft.Extensions.DependencyInjection;
@@ -10,8 +11,9 @@ namespace Lane.Tools;
 
 public sealed class ToolsSetupOptions
 {
-    public BraveSearchOptions Search { get; set; } = new();
-    public BookOptions        Books  { get; set; } = new();
+    public BraveSearchOptions  Search   { get; set; } = new();
+    public BookOptions         Books    { get; set; } = new();
+    public IdentityToolOptions Identity { get; set; } = new();
 }
 
 public static class ServiceCollectionExtensions
@@ -28,6 +30,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddSingleton(options.Search);
         services.AddSingleton(options.Books);
+        services.AddSingleton(options.Identity);
 
         services.TryAddSingleton<IPresenceSink, LoggingPresenceSink>();
 
