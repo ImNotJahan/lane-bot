@@ -5,3 +5,6 @@
 .vscode
 .DS_Store
 Wizard/Books/*
+
+# Copies install.sh keeps of anything it replaces.
+*.backup-*

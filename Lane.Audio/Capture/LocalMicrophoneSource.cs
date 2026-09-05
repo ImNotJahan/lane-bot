@@ -28,6 +28,24 @@ public sealed class MicrophoneOptions
 
     /// <summary>Which conversation the room is talking to.</summary>
     public string Session { get; set; } = "room";
+
+    /// <summary>
+    /// Also mirror what is said into the dashboard, when one is running.
+    ///
+    /// Off, the room is a spoken conversation and nothing else — which is the point, but
+    /// also means the only record of it while it happens is the transcript in the database.
+    /// On, the same exchange scrolls past in the conversation pane, which is the difference
+    /// between watching her mishear somebody and finding out about it tomorrow.
+    /// </summary>
+    public bool ShowInTui { get; set; }
+
+    /// <summary>What the speakers are handed. Playback quality, not recognition quality.</summary>
+    public int OutputSampleRate { get; set; } = 48000;
+
+    public int OutputChannels { get; set; } = 2;
+
+    /// <summary>The playback program. Empty picks one for the platform, as ever.</summary>
+    public string Player { get; set; } = "";
 }
 
 /// <summary>

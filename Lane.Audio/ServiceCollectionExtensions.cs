@@ -142,7 +142,12 @@ public static class ServiceCollectionExtensions
                 options.Microphone,
                 sp.GetRequiredService<AudioRouter>(),
                 sp.GetRequiredService<ISessionRegistry>(),
-                sp.GetRequiredService<ILogger<MicrophoneService>>()));
+                sp.GetRequiredService<ILoggerFactory>(),
+
+                // Optional, and resolved here rather than required: whether anything is
+                // showing the conversation is the host's business, and a room with nobody
+                // watching it still answers out loud.
+                sp.GetService<IRoomEcho>()));
 
         services.AddSingleton<IAgentObserverFactory>(sp => new VoiceObserverFactory(
             sp.GetRequiredService<ISpeechSynthesizer>(),

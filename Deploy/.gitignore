@@ -1,0 +1,3 @@
+# The bundle holds API keys and the memory database. Neither belongs in the repository.
+data/
+*.tgz

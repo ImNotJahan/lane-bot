@@ -1,5 +1,6 @@
 using Lane.Core;
 using Lane.Audio;
+using Lane.Audio.Capture;
 using Lane.Core.Agent;
 using Lane.Core.Energy;
 using Lane.Core.Events;
@@ -88,6 +89,12 @@ public static class LaneHostBuilderExtensions
 
         services.AddSingleton(new ChatView(userName));
         services.AddSingleton<ITerminalIo>(sp => new ChatTerminalIo(sp.GetRequiredService<ChatView>()));
+
+        // The conversation pane, offered to anything that wants to mirror a spoken exchange
+        // into it. Registered only where a dashboard is actually running, so a room with
+        // Microphone:ShowInTui set on a headless host answers out loud and logs the rest
+        // rather than writing over a terminal nobody is drawing on.
+        services.AddSingleton<IRoomEcho>(sp => new TerminalRoomEcho(sp.GetRequiredService<ITerminalIo>()));
 
         services.AddSingleton<IHostedService>(sp => new TuiHost(
             sp.GetRequiredService<IEventBus>(),
