@@ -66,6 +66,28 @@ public sealed class MicrophoneOptions
     /// </summary>
     public TimeSpan EchoTail { get; set; } = TimeSpan.FromMilliseconds(500);
 
+    /// <summary>
+    /// How long to wait before starting the capture program again after it stops, doubling
+    /// on each consecutive failure up to <see cref="MaxRestartDelay"/>.
+    ///
+    /// A program that exits the instant it starts — a device that is named wrong, or gone —
+    /// would otherwise be respawned in a tight loop for the rest of the process's life.
+    /// </summary>
+    public TimeSpan RestartDelay { get; set; } = TimeSpan.FromSeconds(1);
+
+    public TimeSpan MaxRestartDelay { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// How long the capture program may hand over nothing at all before it is assumed wedged
+    /// and restarted. Zero waits forever.
+    ///
+    /// This is not a check for a quiet room. A capture program sends silence as zero samples
+    /// at the sample rate, so a stream that stops arriving entirely has not gone quiet — the
+    /// device underneath it has gone away without telling the process reading it, which is
+    /// what a sleeping machine or a re-enumerated USB microphone does.
+    /// </summary>
+    public TimeSpan StallTimeout { get; set; } = TimeSpan.FromSeconds(30);
+
     /// <summary>What the speakers are handed. Playback quality, not recognition quality.</summary>
     public int OutputSampleRate { get; set; } = 48000;
 
@@ -108,8 +130,8 @@ public sealed class LocalMicrophoneSource : IAudioSource
 
     private readonly CancellationTokenSource _stop = new();
 
-    private Process? _capture;
-    private Task? _pump;
+    private volatile Process? _capture;
+    private Task? _supervisor;
 
     public LocalMicrophoneSource(AudioSourceId id, MicrophoneOptions options, ILogger log)
     {
@@ -126,6 +148,18 @@ public sealed class LocalMicrophoneSource : IAudioSource
     public string? SpeakerHint => null;
 
     public void Start()
+    {
+        // The first launch happens here rather than in the supervisor so that a capture
+        // program which is simply not installed is a startup error somebody sees, instead of
+        // a retry loop running quietly behind a room that never works.
+        Process process = Launch();
+
+        _supervisor = Task.Run(() => SuperviseAsync(process, _stop.Token), CancellationToken.None);
+
+        _log.LogInformation("Listening to the local microphone through {Command}", Executable());
+    }
+
+    private Process Launch()
     {
         (string file, IReadOnlyList<string> arguments) = Command();
 
@@ -153,24 +187,108 @@ public sealed class LocalMicrophoneSource : IAudioSource
                 "Lane:Audio:Microphone:Command.", ex);
         }
 
-        _capture = process;
-        _pump    = Task.Run(() => PumpAsync(process, file, _stop.Token), CancellationToken.None);
-
-        _log.LogInformation("Listening to the local microphone through {Command}", file);
+        return process;
     }
 
     /// <summary>
-    /// Reads raw PCM off the capture program's output for as long as it runs.
+    /// Keeps a capture program running for as long as anything is listening to this source.
+    ///
+    /// A microphone is not a thing that ends, but the program reading it is a child process,
+    /// and that ends for reasons that have nothing to do with the conversation: the machine
+    /// sleeps, the interface is unplugged, the sound stack is reconfigured underneath it. The
+    /// source deliberately outlives all of it — the frame channel stays open across restarts,
+    /// so the recogniser, both gates and the router never learn that the microphone went away
+    /// and never have to be rebuilt to bring it back.
+    ///
+    /// Without this the first such exit was permanent, and it presented as a room that had
+    /// simply stopped being answered.
+    /// </summary>
+    private async Task SuperviseAsync(Process? started, CancellationToken ct)
+    {
+        int failures = 0;
+
+        try
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                Process? process = started;
+
+                started = null;
+
+                try
+                {
+                    process ??= Launch();
+
+                    _capture = process;
+
+                    // A run that produced audio was a working microphone, whatever ended it,
+                    // so the backoff starts again from the beginning rather than punishing it
+                    // for however many times it failed hours ago.
+                    if (await RunAsync(process, ct).ConfigureAwait(false)) failures = 0;
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
+                catch (Exception ex)
+                {
+                    // First at Error so a device named wrong is noticed, the rest at Warning
+                    // so a microphone that is not there does not fill the log all day.
+                    _log.Log(failures == 0 ? LogLevel.Error : LogLevel.Warning, ex,
+                        "The local microphone could not be opened (attempt {Attempt})", failures + 1);
+                }
+                finally
+                {
+                    _capture = null;
+
+                    if (process is not null) { Stop(process); process.Dispose(); }
+                }
+
+                failures++;
+
+                if (ct.IsCancellationRequested) break;
+
+                TimeSpan wait = Backoff(failures);
+
+                _log.LogInformation("Reopening the local microphone in {Delay:0.#}s", wait.TotalSeconds);
+
+                try { await Task.Delay(wait, ct).ConfigureAwait(false); }
+                catch (OperationCanceledException) { break; }
+            }
+        }
+        finally
+        {
+            // Only here: completing the channel is what tells everything downstream the
+            // microphone is gone for good, and until the source is disposed it is not.
+            _frames.Writer.TryComplete();
+        }
+    }
+
+    private TimeSpan Backoff(int failures)
+    {
+        if (failures <= 0) return _options.RestartDelay;
+
+        double seconds = _options.RestartDelay.TotalSeconds * Math.Pow(2, Math.Min(failures - 1, 10));
+
+        seconds = Math.Min(seconds, _options.MaxRestartDelay.TotalSeconds);
+
+        // Jitter, so several sources that lost the same sound stack at the same moment do not
+        // come back for it in lockstep.
+        return TimeSpan.FromSeconds(seconds * (0.8 + Random.Shared.NextDouble() * 0.4));
+    }
+
+    /// <summary>
+    /// Reads raw PCM off one capture program's output for as long as it runs, and says
+    /// whether it produced any audio at all before it stopped.
     ///
     /// Fixed-size reads rather than whole frames: a pipe hands over whatever has arrived,
     /// and a partial read that was treated as a frame would halve the sample it split.
     /// </summary>
-    private async Task PumpAsync(Process process, string command, CancellationToken ct)
+    private async Task<bool> RunAsync(Process process, CancellationToken ct)
     {
         // Drained so a chatty program cannot fill its error pipe and hang, and so its noise
         // goes to the logger rather than over whatever is drawing on the terminal.
-        Task<string> errors = process.StandardError.ReadToEndAsync(ct);
+        Task<string> errors = process.StandardError.ReadToEndAsync(CancellationToken.None);
 
+        // Per run, not per source: a read abandoned at the stall timeout may still be on its
+        // way into this buffer while the next run is already filling one.
         byte[] buffer = new byte[ReadSize + 1];
 
         // A pipe hands over whatever has arrived, which need not be a whole number of
@@ -179,15 +297,28 @@ public sealed class LocalMicrophoneSource : IAudioSource
         // it, and the whole rest of the stream decodes as noise.
         int carry = 0;
 
+        bool heard   = false;
+        bool stalled = false;
+
+        using CancellationTokenSource stall = CancellationTokenSource.CreateLinkedTokenSource(ct);
+
         try
         {
             Stream audio = process.StandardOutput.BaseStream;
 
-            while (!ct.IsCancellationRequested)
+            while (true)
             {
-                int read = await audio.ReadAsync(buffer.AsMemory(carry, ReadSize), ct).ConfigureAwait(false);
+                // Re-armed before every read, so it measures the gap between reads rather
+                // than the age of the connection.
+                if (_options.StallTimeout > TimeSpan.Zero) stall.CancelAfter(_options.StallTimeout);
+
+                int read = await audio
+                    .ReadAsync(buffer.AsMemory(carry, ReadSize), stall.Token)
+                    .ConfigureAwait(false);
 
                 if (read == 0) break;
+
+                heard = true;
 
                 int available = carry + read;
                 int whole     = available - available % Format.BytesPerFrame;
@@ -199,24 +330,45 @@ public sealed class LocalMicrophoneSource : IAudioSource
                 if (carry > 0) buffer[0] = buffer[whole];
             }
         }
-        catch (OperationCanceledException) { /* shutting down */ }
-        catch (Exception ex)
+        catch (OperationCanceledException)
         {
-            _log.LogError(ex, "Reading from the local microphone failed");
+            stalled = !ct.IsCancellationRequested;
         }
         finally
         {
-            _frames.Writer.TryComplete();
+            // Killed rather than left to exit: on the stall path the program is still running
+            // and still holding the device, and the drain below only ends once it is gone.
+            Stop(process);
         }
 
-        if (ct.IsCancellationRequested) return;
+        string said = await SaidAsync(errors).ConfigureAwait(false);
 
-        // Getting here means the capture program stopped on its own, which is the case worth
-        // being loud about: the room goes quiet and nothing else would say why.
-        string stderr = (await errors.ConfigureAwait(false)).Trim();
+        if (ct.IsCancellationRequested) return heard;
 
-        _log.LogError("The microphone capture program {Command} stopped{Detail}",
-            command, stderr.Length > 0 ? $": {stderr}" : "");
+        if (stalled)
+            _log.LogWarning(
+                "The local microphone handed over nothing for {Timeout:0.#}s, which a working one never does{Detail}",
+                _options.StallTimeout.TotalSeconds, Detail(said));
+        else
+            _log.LogWarning("The microphone capture program {Command} stopped{Detail}",
+                Executable(), Detail(said));
+
+        return heard;
+    }
+
+    private static string Detail(string said) => said.Length > 0 ? $": {said}" : "";
+
+    /// <summary>Whatever the capture program said on its way out, or nothing if it would not say.</summary>
+    private static async Task<string> SaidAsync(Task<string> errors)
+    {
+        try { return (await errors.ConfigureAwait(false)).Trim(); }
+        catch (Exception) { return ""; }
+    }
+
+    private static void Stop(Process process)
+    {
+        try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
+        catch (Exception) { /* already gone, or already disposed */ }
     }
 
     /// <summary>
@@ -260,17 +412,13 @@ public sealed class LocalMicrophoneSource : IAudioSource
     {
         await _stop.CancelAsync().ConfigureAwait(false);
 
-        if (_capture is { } process)
-        {
-            try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
-            catch (Exception) { /* already gone */ }
+        // Killed as well as cancelled: a read pending on a pipe does not always come back
+        // for the token, and closing the far end of it is what makes it return.
+        if (_capture is { } process) Stop(process);
 
-            process.Dispose();
-        }
-
-        if (_pump is not null)
+        if (_supervisor is not null)
         {
-            try { await _pump.WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false); }
+            try { await _supervisor.WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false); }
             catch (Exception) { /* shutting down */ }
         }
 

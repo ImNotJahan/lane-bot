@@ -193,12 +193,6 @@ public static class LaneHostBuilderExtensions
     }
 
     /// <summary>
-    /// Her metabolism. Bound and re-applied field by field, like the monologue, so that the
-    /// options the stages read are the same object the enabled check was made against — and so
-    /// a disabled section leaves <c>BoundlessEnergy</c> in place rather than a service that has
-    /// to remember to do nothing.
-    /// </summary>
-    /// <summary>
     /// Reads the energy section, taking care over the lists in it.
     ///
     /// <c>Bind</c> *appends* to a list that already has items rather than replacing it, so
@@ -229,6 +223,12 @@ public static class LaneHostBuilderExtensions
         return options;
     }
 
+    /// <summary>
+    /// Her metabolism. Bound and re-applied field by field, like the monologue, so that the
+    /// options the stages read are the same object the enabled check was made against — and so
+    /// a disabled section leaves <c>BoundlessEnergy</c> in place rather than a service that has
+    /// to remember to do nothing.
+    /// </summary>
     private static void RegisterEnergy(IServiceCollection services, IConfigurationSection section)
     {
         EnergyOptions options = ReadEnergyOptions(section);

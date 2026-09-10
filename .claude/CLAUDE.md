@@ -1,0 +1,2 @@
+## Code Comments
+Do not write comments which are verbose or pointless. Only write what cannot be inferred from the code, and do not write *why*, only *what*, and only in the case where it is nonobvious. It is good to write short Javadoc summaries for new methods, but only when the method has behavior which you wouldn't immediately pick up from its name.

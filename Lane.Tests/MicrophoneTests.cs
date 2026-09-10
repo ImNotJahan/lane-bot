@@ -88,14 +88,21 @@ public sealed class MicrophoneTests
         Assert.Contains("Lane:Audio:Microphone:Command", ex.Message);
     }
 
-    /// <summary>Runs a shell command as the capture program and returns every byte heard.</summary>
-    private static async Task<byte[]> CaptureAsync(string script)
+    /// <summary>
+    /// Runs a shell command as the capture program and returns the first <paramref
+    /// name="wanted"/> bytes heard.
+    ///
+    /// Read to a count rather than to the end of the stream, because the source deliberately
+    /// has no end: a capture program that exits is restarted rather than being the last word.
+    /// </summary>
+    private static async Task<byte[]> CaptureAsync(string script, int wanted, MicrophoneOptions? options = null)
     {
-        await using LocalMicrophoneSource source = Source(new MicrophoneOptions
-        {
-            Command   = "sh",
-            Arguments = ["-c", script]
-        });
+        options ??= new MicrophoneOptions();
+
+        options.Command   = "sh";
+        options.Arguments = ["-c", script];
+
+        await using LocalMicrophoneSource source = Source(options);
 
         source.Start();
 
@@ -113,9 +120,11 @@ public sealed class MicrophoneTests
                 Assert.Equal(0, frame.Pcm.Length % 2);
 
                 heard.AddRange(frame.Pcm.ToArray());
+
+                if (heard.Count >= wanted) break;
             }
         }
-        catch (OperationCanceledException) { /* the source completes when the program exits */ }
+        catch (OperationCanceledException) { /* leaves whatever arrived, and the assert says so */ }
 
         return [.. heard];
     }
@@ -123,7 +132,7 @@ public sealed class MicrophoneTests
     [Fact]
     public async Task Audio_arrives_as_whole_samples_at_the_rate_recognition_wants()
     {
-        Assert.Equal("abcdefghij"u8.ToArray(), await CaptureAsync("printf 'abcdefghij'"));
+        Assert.Equal("abcdefghij"u8.ToArray(), await CaptureAsync("printf 'abcdefghij'", 10));
     }
 
     [Fact]
@@ -134,8 +143,61 @@ public sealed class MicrophoneTests
         // rest of the stream decodes as noise. Two odd-length writes with a pause between
         // them make the pipe hand over a half sample, which is what a real microphone does
         // constantly.
-        byte[] heard = await CaptureAsync("printf 'abcde'; sleep 0.2; printf 'fghij'");
+        byte[] heard = await CaptureAsync("printf 'abcde'; sleep 0.2; printf 'fghij'", 10);
 
         Assert.Equal("abcdefghij"u8.ToArray(), heard);
+    }
+
+    [Fact]
+    public async Task A_capture_program_that_stops_is_started_again()
+    {
+        // The failure that prompted this: a capture program exits hours in — the machine
+        // slept, the interface was unplugged — and the room simply stops being answered, with
+        // one line in a log nobody is reading to say why.
+        byte[] heard = await CaptureAsync("printf 'abcdefghij'", 20, new MicrophoneOptions
+        {
+            RestartDelay = TimeSpan.FromMilliseconds(10)
+        });
+
+        Assert.Equal("abcdefghijabcdefghij"u8.ToArray(), heard);
+    }
+
+    [Fact]
+    public async Task A_capture_program_that_goes_silent_without_exiting_is_restarted()
+    {
+        // The nastier half of the same failure: the program is alive and the pipe is open, so
+        // nothing looks wrong, but the device behind it has gone away and no sample will ever
+        // arrive again. A working microphone sends silence as zero samples, so a stream that
+        // stops arriving at all is never just a quiet room.
+        byte[] heard = await CaptureAsync("printf 'abcdefghij'; sleep 30", 20, new MicrophoneOptions
+        {
+            RestartDelay = TimeSpan.FromMilliseconds(10),
+            StallTimeout = TimeSpan.FromMilliseconds(300)
+        });
+
+        Assert.Equal("abcdefghijabcdefghij"u8.ToArray(), heard);
+    }
+
+    [Fact]
+    public async Task Restarting_backs_off_so_a_device_that_is_gone_is_not_hammered()
+    {
+        // A program that exits the instant it starts would otherwise be respawned in a tight
+        // loop for the rest of the process's life.
+        MicrophoneOptions options = new()
+        {
+            RestartDelay    = TimeSpan.FromMilliseconds(200),
+            MaxRestartDelay = TimeSpan.FromSeconds(1)
+        };
+
+        long start = Environment.TickCount64;
+
+        // Three runs means two waits, and the second is twice the first.
+        byte[] heard = await CaptureAsync("printf 'ab'", 6, options);
+
+        Assert.Equal("ababab"u8.ToArray(), heard);
+
+        // 200ms + 400ms, less the jitter floor of 0.8.
+        Assert.True(Environment.TickCount64 - start >= 480,
+            $"Restarted after only {Environment.TickCount64 - start}ms");
     }
 }

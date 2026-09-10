@@ -79,7 +79,6 @@ public sealed class SoundTouchSampleProvider : ISampleProvider, IDisposable
 
         while (written < count)
         {
-            // First drain anything already produced by SoundTouch.
             if (_outputReadIndex < _outputSamplesAvailable)
             {
                 int available = _outputSamplesAvailable - _outputReadIndex;
@@ -99,10 +98,8 @@ public sealed class SoundTouchSampleProvider : ISampleProvider, IDisposable
                 continue;
             }
 
-            // Refill SoundTouch output buffer.
             if (TryFillOutputBuffer()) continue;
 
-            // Nothing more available.
             break;
         }
 
@@ -114,7 +111,6 @@ public sealed class SoundTouchSampleProvider : ISampleProvider, IDisposable
         _outputReadIndex        = 0;
         _outputSamplesAvailable = 0;
 
-        // Try pulling already-buffered processed samples first.
         int receivedFrames = ReceiveProcessedFrames(_outputBuffer);
 
         if (receivedFrames > 0)
@@ -123,7 +119,6 @@ public sealed class SoundTouchSampleProvider : ISampleProvider, IDisposable
             return true;
         }
 
-        // Feed more source audio if source not ended.
         if (!_sourceEnded)
         {
             int samplesRead = _source.Read(_inputBuffer, 0, _inputBuffer.Length);

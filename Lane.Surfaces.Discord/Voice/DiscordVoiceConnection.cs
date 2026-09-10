@@ -85,7 +85,6 @@ internal sealed class DiscordVoiceConnection(
         if (args.UserId == gateway.Id) return default;   // her own voice
         if (_session is null) return default;
 
-        // Already listening to this speaker.
         if (_sources.ContainsKey(args.Ssrc)) return default;
 
         _ = Task.Run(() => StartListeningAsync(args.Ssrc, args.UserId));
