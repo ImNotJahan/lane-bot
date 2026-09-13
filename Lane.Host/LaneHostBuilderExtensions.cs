@@ -17,7 +17,7 @@ using Lane.Core.Surfaces;
 using Lane.Host.Configuration;
 using Lane.Host.Logging;
 using Lane.Host.Presence;
-using Lane.Host.Ui;
+using Lane.Host.Web;
 using Lane.Memory;
 using Lane.Memory.Sqlite;
 using Lane.Tools;
@@ -31,6 +31,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Lane.Host;
 
@@ -44,7 +45,7 @@ public static class LaneHostBuilderExtensions
     /// adding a second Discord bot is a config entry rather than a code change.
     /// </summary>
     public static IHostApplicationBuilder AddLane(
-        this IHostApplicationBuilder builder, bool useDashboard, BufferedLogSink logs)
+        this IHostApplicationBuilder builder, BufferedLogSink logs, bool runDashboard = true)
     {
         IConfigurationSection section = builder.Configuration.GetSection(LaneOptions.SectionName);
 
@@ -71,41 +72,32 @@ public static class LaneHostBuilderExtensions
         RegisterModels(builder.Services, section.GetSection("Models"));
         RegisterSurfaces(builder.Services, section.GetSection("Surfaces"));
 
-        if (useDashboard) RegisterDashboard(builder.Services, section, logs);
+        if (runDashboard) RegisterWebDashboard(builder.Services, section.GetSection("Dashboard"), logs);
 
         return builder;
     }
 
-    private static void RegisterDashboard(
+    /// <summary>
+    /// The dashboard that used to be a Terminal.Gui layout is now a small HTTP server: it
+    /// never touches the console, so the terminal surface is free to just be stdin and
+    /// stdout again rather than handing its reader and writer to a UI that owned the screen.
+    /// </summary>
+    private static void RegisterWebDashboard(
         IServiceCollection services, IConfigurationSection section, BufferedLogSink logs)
     {
         services.AddSingleton(logs);
+        services.Configure<DashboardOptions>(section);
 
-        // The chat pane stands in for the console, so it needs to introduce the person at
-        // the keyboard the same way the terminal surface would have.
-        string userName = section.GetSection("Surfaces").GetChildren()
-            .FirstOrDefault(s => string.Equals(s["Type"], "terminal", StringComparison.OrdinalIgnoreCase))
-            ?["Options:UserName"] ?? "you";
-
-        services.AddSingleton(new ChatView(userName));
-        services.AddSingleton<ITerminalIo>(sp => new ChatTerminalIo(sp.GetRequiredService<ChatView>()));
-
-        // The conversation pane, offered to anything that wants to mirror a spoken exchange
-        // into it. Registered only where a dashboard is actually running, so a room with
-        // Microphone:ShowInTui set on a headless host answers out loud and logs the rest
-        // rather than writing over a terminal nobody is drawing on.
-        services.AddSingleton<IRoomEcho>(sp => new TerminalRoomEcho(sp.GetRequiredService<ITerminalIo>()));
-
-        services.AddSingleton<IHostedService>(sp => new TuiHost(
+        services.AddSingleton<IHostedService>(sp => new WebDashboardServer(
             sp.GetRequiredService<IEventBus>(),
             sp.GetRequiredService<ISessionRegistry>(),
             sp.GetRequiredService<ILanguageModelRegistry>(),
             logs,
             sp.GetRequiredService<IMonologueScheduler>(),
             sp.GetRequiredService<IEnergyService>(),
+            sp.GetRequiredService<IOptions<DashboardOptions>>(),
             sp.GetRequiredService<IHostApplicationLifetime>(),
-            sp.GetRequiredService<ILogger<TuiHost>>(),
-            sp.GetRequiredService<ChatView>()));
+            sp.GetRequiredService<ILogger<WebDashboardServer>>()));
     }
 
     /// <summary>

@@ -24,11 +24,6 @@ if (args.FirstOrDefault() == "say")
 
 bool migrating = args.Contains("migrate");
 
-// The dashboard owns the terminal when it runs, so the choice has to be made before
-// anything decides where log output goes.
-bool headless = migrating || args.Contains("--no-tui")
-                || Console.IsInputRedirected || Console.IsOutputRedirected;
-
 BufferedLogSink logs = new();
 
 HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
@@ -39,15 +34,15 @@ builder.Configuration
 
 builder.Logging.ClearProviders();
 
-// Every log line goes to the buffer that feeds the dashboard's tail pane, whether or not
-// the dashboard is running — it costs nothing and means the pane opens with history.
+// Every log line goes to the buffer that feeds the web dashboard's tail pane — it costs
+// nothing and means the page opens with history.
 builder.Logging.AddProvider(new BufferedLoggerProvider(logs));
 
-// Console output is only safe when Terminal.Gui is not drawing over it. Even then it goes
-// to stderr, so a piped conversation on stdout stays clean.
-if (headless) builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
+// The terminal is just stdin and stdout now; logging goes to stderr so a piped
+// conversation on stdout stays clean.
+builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
 
-builder.AddLane(useDashboard: !headless && !migrating, logs);
+builder.AddLane(logs, runDashboard: !migrating);
 
 builder.Services.AddSingleton<V2Migrator>();
 

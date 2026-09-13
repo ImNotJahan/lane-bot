@@ -2,6 +2,8 @@
 */obj/*
 .env
 */.env
+appsettings.local.json
+*/appsettings.local.json
 .vscode
 .DS_Store
 Wizard/Books/*

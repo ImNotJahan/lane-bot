@@ -10,25 +10,6 @@ using Microsoft.Extensions.Logging;
 
 namespace Lane.Surfaces.Terminal;
 
-/// <summary>
-/// Where the terminal surface reads and writes.
-///
-/// Exists because Terminal.Gui owns the screen: when the dashboard is running, the surface
-/// cannot touch <c>Console.In</c> or <c>Console.Out</c> without tearing the layout apart.
-/// The surface does not need to know which it is talking to.
-/// </summary>
-public interface ITerminalIo
-{
-    TextReader Reader { get; }
-    TextWriter Writer { get; }
-
-    /// <summary>False when something else already shows an input prompt.</summary>
-    bool ShowPrompt { get; }
-
-    /// <summary>False when losing this input is not a reason to stop the process.</summary>
-    bool ExitOnEndOfInput { get; }
-}
-
 public sealed class TerminalSurfaceOptions
 {
     /// <summary>How the person at the keyboard is identified in memory and in prompts.</summary>
@@ -81,9 +62,9 @@ public sealed class TerminalSurface : ISurface
         TerminalSurfaceOptions options,
         ILogger<TerminalSurface> log,
         IHostApplicationLifetime? lifetime = null,
+        IIdentityResolver? identity = null,
         TextReader? input = null,
-        TextWriter? output = null,
-        IIdentityResolver? identity = null)
+        TextWriter? output = null)
     {
         _identity       = identity ?? IdentityResolver.Empty;
         Id              = id;
@@ -202,16 +183,6 @@ public sealed class TerminalSurfaceFactory : ISurfaceFactory
         TerminalSurfaceOptions bound = new();
         options.Bind(bound);
 
-        // When a UI has claimed the screen it registers its own reader and writer, and the
-        // surface talks to those instead of the console without knowing the difference.
-        ITerminalIo? io = services.GetService<ITerminalIo>();
-
-        if (io is not null)
-        {
-            bound.ShowPrompt       = io.ShowPrompt;
-            bound.ExitOnEndOfInput = io.ExitOnEndOfInput;
-        }
-
         return new TerminalSurface(
             id,
             services.GetRequiredService<IAgentKernel>(),
@@ -219,8 +190,6 @@ public sealed class TerminalSurfaceFactory : ISurfaceFactory
             bound,
             services.GetRequiredService<ILogger<TerminalSurface>>(),
             services.GetService<IHostApplicationLifetime>(),
-            io?.Reader,
-            io?.Writer,
             services.GetService<IIdentityResolver>());
     }
 }
