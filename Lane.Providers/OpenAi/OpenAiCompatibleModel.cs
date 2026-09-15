@@ -15,7 +15,14 @@ public sealed class OpenAiCompatibleOptions
     public required string InstanceId { get; init; }
     public required string Model      { get; init; }
     public required string Endpoint   { get; init; }
+    /// <summary>Sent as a bearer token. Empty sends no Authorization header, for local servers.</summary>
     public required string ApiKey     { get; init; }
+
+    /// <summary>Relative to <see cref="Endpoint"/>; may carry a query string.</summary>
+    public string ChatCompletionsPath { get; init; } = "chat/completions";
+
+    /// <summary>Added to every request.</summary>
+    public IReadOnlyDictionary<string, string> Headers { get; init; } = new Dictionary<string, string>();
 
     /// <summary>
     /// What this particular model can do.
@@ -49,17 +56,20 @@ public sealed class OpenAiCompatibleModel : ILanguageModel
     public OpenAiCompatibleModel(
         HttpClient http, OpenAiCompatibleOptions options, ILogger<OpenAiCompatibleModel> log)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(options.ApiKey);
-
         _http    = http;
         _options = options;
         _log     = log;
 
         _http.BaseAddress ??= new Uri(options.Endpoint.TrimEnd('/') + "/");
-        _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", options.ApiKey);
+
+        if (!string.IsNullOrWhiteSpace(options.ApiKey))
+            _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", options.ApiKey);
 
         if (!string.IsNullOrWhiteSpace(options.AppName))
             _http.DefaultRequestHeaders.TryAddWithoutValidation("X-Title", options.AppName);
+
+        foreach ((string name, string value) in options.Headers)
+            _http.DefaultRequestHeaders.TryAddWithoutValidation(name, value);
 
         Descriptor = new ModelDescriptor(
             options.InstanceId, ProviderNameFor(options.Endpoint), options.Model, options.Capabilities);
@@ -76,7 +86,7 @@ public sealed class OpenAiCompatibleModel : ILanguageModel
         long started = Stopwatch.GetTimestamp();
 
         using HttpResponseMessage response = await _http
-            .PostAsJsonAsync("chat/completions", body, ct)
+            .PostAsJsonAsync(_options.ChatCompletionsPath.TrimStart('/'), body, ct)
             .ConfigureAwait(false);
 
         string raw = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);

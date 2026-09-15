@@ -4,6 +4,7 @@ using Lane.Audio.Capture;
 using Lane.Core.Agent;
 using Lane.Core.Energy;
 using Lane.Core.Events;
+using Lane.Core.Forum;
 using Lane.Core.Identity;
 using Lane.Core.Memory;
 using Lane.Core.Messages;
@@ -20,6 +21,10 @@ using Lane.Host.Presence;
 using Lane.Host.Web;
 using Lane.Memory;
 using Lane.Memory.Sqlite;
+using Lane.Core.Credits;
+using Lane.Core.Nodes;
+using Lane.Nodes;
+using Lane.Nodes.Portal;
 using Lane.Tools;
 using Lane.Tools.Mcp;
 using Lane.Providers.Anthropic;
@@ -69,6 +74,7 @@ public static class LaneHostBuilderExtensions
         RegisterMemory(builder.Services, section.GetSection("Memory"));
         RegisterTools(builder.Services, section.GetSection("Tools"));
         RegisterSurfaceFactories(builder.Services);
+        RegisterNodes(builder.Services, section.GetSection("Nodes"));
         RegisterModels(builder.Services, section.GetSection("Models"));
         RegisterSurfaces(builder.Services, section.GetSection("Surfaces"));
 
@@ -162,6 +168,10 @@ public static class LaneHostBuilderExtensions
         services.AddSingleton<SessionDescriptions>();
         services.AddSingleton<ISessionDescriptions>(sp => sp.GetRequiredService<SessionDescriptions>());
         services.AddHostedService(sp => sp.GetRequiredService<SessionDescriptions>());
+
+        services.AddSingleton<SessionThresholds>();
+        services.AddSingleton<ISessionThresholds>(sp => sp.GetRequiredService<SessionThresholds>());
+        services.AddHostedService(sp => sp.GetRequiredService<SessionThresholds>());
     }
 
     private static void RegisterMonologue(IServiceCollection services, IConfigurationSection section)
@@ -515,18 +525,62 @@ public static class LaneHostBuilderExtensions
         ["deepseek"]   = "https://api.deepseek.com/v1"
     };
 
+    /// <summary>The pool is registered whether or not the listener is enabled, so a "node" model
+    /// instance can be constructed and fail with a clear message instead of a missing service.</summary>
+    private static void RegisterNodes(IServiceCollection services, IConfigurationSection section)
+    {
+        NodesOptions options = new();
+        section.Bind(options);
+
+        services.AddSingleton(options);
+        services.AddSingleton(sp => new NodePool(
+            sp.GetRequiredService<IEventBus>(), sp.GetService<ILogger<NodePool>>()));
+        services.AddSingleton<INodeResponseValidator, AcceptAllNodeValidator>();
+
+        services.AddSingleton(sp => new NodeBookkeeper(
+            sp.GetRequiredService<INodeDirectory>(),
+            sp.GetRequiredService<ICreditLedger>(),
+            options,
+            sp.GetRequiredService<ILogger<NodeBookkeeper>>()));
+
+        if (!options.Enabled) return;
+
+        services.AddSingleton<ILaneStatusSource, HostLaneStatus>();
+
+        services.AddSingleton<ISponsoredAccess>(sp => new SponsoredAccess(
+            sp.GetRequiredService<ISponsorships>(), options, sp.GetRequiredService<ILogger<SponsoredAccess>>()));
+
+        services.AddSingleton(sp => new NodePortal(
+            sp.GetRequiredService<NodePool>(),
+            sp.GetRequiredService<INodeDirectory>(),
+            sp.GetRequiredService<ICreditLedger>(),
+            sp.GetRequiredService<ISponsorships>(),
+            sp.GetRequiredService<IForum>(),
+            sp.GetRequiredService<ILaneStatusSource>(),
+            options));
+
+        services.AddSingleton<IHostedService>(sp => new NodeListener(
+            sp.GetRequiredService<NodePool>(),
+            options,
+            sp.GetRequiredService<ILoggerFactory>(),
+            sp.GetRequiredService<NodeBookkeeper>(),
+            sp.GetRequiredService<NodePortal>()));
+    }
+
     private static ILanguageModel CreateModel(ModelInstanceOptions options, IServiceProvider sp)
     {
         ISecretResolver secrets = sp.GetRequiredService<ISecretResolver>();
         IEventBus       bus     = sp.GetRequiredService<IEventBus>();
 
-        string key = secrets.Require(options.KeyRef, $"model instance '{options.Id}'");
+        string RequireKey() => secrets.Require(options.KeyRef, $"model instance '{options.Id}'");
 
         ILanguageModel model = options.Provider.ToLowerInvariant() switch
         {
             "anthropic" => new AnthropicModel(
-                new AnthropicModelOptions { InstanceId = options.Id, Model = options.Model, ApiKey = key },
+                new AnthropicModelOptions { InstanceId = options.Id, Model = options.Model, ApiKey = RequireKey() },
                 sp.GetRequiredService<ILogger<AnthropicModel>>()),
+
+            "node" => CreateNodeModel(options, sp),
 
             // One adapter serves every OpenAI-compatible endpoint; only the URL differs.
             "openrouter" or "deepseek" or "openai-compatible" => new OpenAiCompatibleModel(
@@ -535,7 +589,7 @@ public static class LaneHostBuilderExtensions
                 {
                     InstanceId   = options.Id,
                     Model        = options.Model,
-                    ApiKey       = key,
+                    ApiKey       = RequireKey(),
                     Endpoint     = ResolveEndpoint(options),
                     Capabilities = ParseCapabilities(options)
                 },
@@ -543,13 +597,36 @@ public static class LaneHostBuilderExtensions
 
             _ => throw new InvalidOperationException(
                 $"Model instance '{options.Id}' names unknown provider '{options.Provider}'. " +
-                "Known providers: anthropic, openrouter, deepseek, openai-compatible.")
+                "Known providers: anthropic, openrouter, deepseek, openai-compatible, node.")
         };
 
         // Wrapped so every provider reports usage without knowing the bus exists. No role
         // is attached here: one instance can serve several roles, and the dashboard reads
         // the bindings from the registry anyway.
         return new TelemetryLanguageModel(model, bus);
+    }
+
+    private static NodeLanguageModel CreateNodeModel(ModelInstanceOptions options, IServiceProvider sp)
+    {
+        NodesOptions nodes = sp.GetRequiredService<NodesOptions>();
+
+        if (!nodes.Enabled)
+            throw new InvalidOperationException(
+                $"Model instance '{options.Id}' uses provider 'node', but Lane:Nodes:Enabled is false.");
+
+        if (string.IsNullOrWhiteSpace(options.Pool))
+            throw new InvalidOperationException(
+                $"Model instance '{options.Id}' uses provider 'node' and needs a Pool.");
+
+        return new NodeLanguageModel(
+            options.Id,
+            options.Pool,
+            ParseCapabilities(options),
+            sp.GetRequiredService<NodePool>(),
+            sp.GetRequiredService<INodeResponseValidator>(),
+            nodes,
+            sp.GetRequiredService<ILogger<NodeLanguageModel>>(),
+            sp.GetRequiredService<NodeBookkeeper>());
     }
 
     private static string ResolveEndpoint(ModelInstanceOptions options)

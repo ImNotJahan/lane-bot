@@ -1,0 +1,538 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lane Node</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --panel: #ffffff; --text: #1d1d1f; --muted: #6b6b70; --border: #e2e0db;
+    --input: #ffffff; --accent: #3a5bd9; --on-accent: #ffffff;
+    --ok: #1f8a4c; --warn: #b7791f; --bad: #c0392b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141416; --panel: #1d1d20; --text: #ececef; --muted: #9a9aa2; --border: #2e2e33;
+      --input: #161618; --accent: #7b93ff; --on-accent: #0d0d10;
+      --ok: #4cc38a; --warn: #e0a84a; --bad: #ff6b5e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
+  main { max-width: 960px; margin: 0 auto; padding: 24px 16px 48px; display: grid; gap: 16px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  h1 { font-size: 20px; margin: 0; }
+  h2 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 12px; }
+  h2:not(:first-child) { margin-top: 20px; }
+  a { color: var(--accent); }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+  label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+  input, select, textarea { font: inherit; color: var(--text); background: var(--input); border: 1px solid var(--border); border-radius: 6px; padding: 7px 9px; min-width: 0; }
+  textarea { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; resize: vertical; }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+  .muted { color: var(--muted); margin: 8px 0 0; font-size: 13px; }
+  .caps { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+  .caps label { display: flex; align-items: center; gap: 6px; color: var(--text); font-size: 13px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .security-key { margin-top: 12px; justify-content: space-between; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+  button { font: inherit; border-radius: 6px; padding: 8px 14px; border: 1px solid var(--border); background: var(--panel); color: var(--text); cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  button:disabled { opacity: .5; cursor: default; }
+  .pill { display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel); font-size: 13px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .pill[data-status=Connected] .dot { background: var(--ok); }
+  .pill[data-status=Connecting] .dot,
+  .pill[data-status=WaitingForTouch] .dot { background: var(--warn); }
+  .pill[data-status=Failed] .dot { background: var(--bad); }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
+  dt { color: var(--muted); }
+  dd { margin: 0; overflow-wrap: anywhere; }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+  .error { color: var(--bad); margin: 12px 0 0; }
+  .notice { color: var(--warn); margin: 12px 0 0; }
+  pre#logs { margin: 0; max-height: 300px; overflow: auto; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+  dialog { border: 1px solid var(--border); border-radius: 12px; background: var(--panel); color: var(--text); padding: 24px; width: min(400px, 92vw); text-align: center; }
+  dialog::backdrop { background: rgb(0 0 0 / .45); }
+  dialog p { margin: 0 0 12px; color: var(--muted); }
+  .key-icon { width: 56px; height: 56px; margin: 4px auto 12px; color: var(--accent); animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .45; } }
+  @media (prefers-reduced-motion: reduce) { .key-icon { animation: none; } }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Lane node</h1>
+    <a href="lane/" target="_blank" style="margin-left: auto">Leaderboard &amp; wallet</a>
+    <span class="pill" id="status"><span class="dot"></span><span id="status-text">Loading…</span></span>
+  </header>
+
+  <section class="panel">
+    <h2>Status</h2>
+    <dl>
+      <dt>Detail</dt><dd id="detail">—</dd>
+      <dt>Identity</dt><dd><code id="identity">—</code></dd>
+      <dt>Connection</dt><dd><code id="connection">—</code></dd>
+      <dt>Requests</dt><dd id="counts">—</dd>
+    </dl>
+  </section>
+
+  <form class="panel" id="settings" novalidate>
+    <h2>Lane</h2>
+    <div class="grid">
+      <label>Lane URL <input name="laneUrl" placeholder="ws://127.0.0.1:5070"></label>
+      <label>Pool <input name="pool"></label>
+      <label>Node name <input name="name"></label>
+      <label>Max concurrent requests <input name="concurrency" type="number" min="1"></label>
+    </div>
+
+    <h2>Provider</h2>
+    <div class="grid">
+      <label>Template <select name="provider" id="provider"></select></label>
+      <label>API key <input name="apiKey" id="key" type="password" autocomplete="off"></label>
+      <label>Model
+        <span class="row" style="flex-wrap: nowrap">
+          <input name="model" id="model" list="model-list" style="flex: 1">
+          <button type="button" id="list-models">List</button>
+        </span>
+      </label>
+    </div>
+    <datalist id="model-list"></datalist>
+    <p class="muted" id="models-status" hidden></p>
+    <details id="advanced" style="margin-top: 12px">
+      <summary>Endpoints and headers</summary>
+      <div class="grid" style="margin-top: 12px">
+        <label>Endpoint <input name="endpoint" data-template-field placeholder="https://api.openai.com/v1"></label>
+        <label>Chat completions path <input name="chatCompletionsPath" data-template-field placeholder="chat/completions"></label>
+        <label>Models path <input name="modelsPath" data-template-field placeholder="models"></label>
+      </div>
+      <label style="margin-top: 12px">Extra headers, one <code>Name: value</code> per line
+        <textarea id="headers" rows="3" data-template-field spellcheck="false"></textarea>
+      </label>
+    </details>
+
+    <h2>Capabilities</h2>
+    <div class="caps" id="caps"></div>
+
+    <h2>Identity</h2>
+    <div class="grid">
+      <label>Key source
+        <select name="identity" id="identity-source">
+          <option value="SecurityKey">Security key</option>
+          <option value="KeyFile">Key pair file</option>
+        </select>
+      </label>
+      <label data-for="KeyFile">Key file <input name="keyFilePath" id="key-file-path" spellcheck="false"></label>
+    </div>
+    <div class="row security-key" data-for="KeyFile">
+      <span id="key-file-status">No key pair at this path.</span>
+      <button type="button" id="generate-key">Generate key pair</button>
+    </div>
+    <p class="muted" data-for="KeyFile">
+      Anyone with this file can act as your identity and spend its credits, so keep it private. Back it up too: without it,
+      the identity and its credits are gone. To sign in to the portal elsewhere, pick this file on its sign-in page.
+    </p>
+    <div class="row security-key" data-for="SecurityKey">
+      <span id="registered">No security key registered.</span>
+      <button type="button" id="register">Register security key</button>
+    </div>
+    <p class="notice" id="host-notice" hidden>
+      Security keys only work when this page is opened at <a id="localhost-link" href="#">localhost</a>.
+    </p>
+
+    <p class="error" id="form-error" hidden></p>
+
+    <div class="row" style="margin-top: 16px">
+      <button class="primary" type="submit" id="start">Start</button>
+      <button type="button" id="stop" disabled>Stop</button>
+    </div>
+  </form>
+
+  <section class="panel">
+    <h2>Log</h2>
+    <pre id="logs"></pre>
+  </section>
+</main>
+
+<dialog id="touch-dialog">
+  <svg class="key-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <rect x="7" y="2" width="10" height="14" rx="2"></rect>
+    <path d="M9 16v4a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-4"></path>
+    <circle cx="12" cy="9" r="2.2"></circle>
+  </svg>
+  <h2>Security key</h2>
+  <p>Insert your security key and touch it when it flashes to start the node.</p>
+  <p class="error" id="touch-error" hidden></p>
+  <div class="row" style="justify-content: center; margin-top: 16px">
+    <button type="button" id="touch-stop">Stop node</button>
+    <button type="button" class="primary" id="touch-retry">Use security key</button>
+  </div>
+</dialog>
+
+<script>
+  const CAPABILITIES = ["Tools", "ParallelTools", "Streaming", "Images", "PromptCaching", "StructuredOutput", "StopSequences", "Thinking"];
+  const STATUS_TEXT = {
+    Stopped: "Stopped", WaitingForTouch: "Waiting for security key",
+    Connecting: "Connecting", Connected: "Connected", Failed: "Failed"
+  };
+
+  const $ = id => document.getElementById(id);
+  const form = $("settings");
+  const dialog = $("touch-dialog");
+
+  let filled = false;
+  let latest = null;
+  let attemptedChallenge = null;
+  let touching = false;
+
+  const toBase64Url = buffer =>
+    btoa(String.fromCharCode(...new Uint8Array(buffer))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+  const fromBase64Url = text =>
+    Uint8Array.from(atob(text.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((text.length + 3) % 4)), c => c.charCodeAt(0));
+
+  for (const name of CAPABILITIES) {
+    const label = document.createElement("label");
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.name = "cap";
+    box.value = name;
+    label.append(box, name);
+    $("caps").append(label);
+  }
+
+  if (location.hostname !== "localhost") {
+    const link = $("localhost-link");
+    link.href = `${location.protocol}//localhost${location.port ? ":" + location.port : ""}${location.pathname}`;
+    link.textContent = link.href;
+  }
+
+  function showIdentityFields() {
+    const source = $("identity-source").value;
+    form.querySelectorAll("[data-for]").forEach(el => el.hidden = el.dataset.for !== source);
+    $("host-notice").hidden = location.hostname === "localhost" || source !== "SecurityKey";
+  }
+
+  function renderKeyFile() {
+    const status = $("key-file-status");
+    const typed = $("key-file-path").value.trim();
+    const loaded = latest?.keyFileId && typed === latest.settings.keyFilePath;
+    status.replaceChildren();
+    if (loaded) {
+      const code = document.createElement("code");
+      code.textContent = latest.keyFileId;
+      status.append("Key pair: ", code);
+    } else {
+      status.textContent = typed === latest?.settings.keyFilePath ? "No key pair at this path." : "Start the node to use this path, or generate a new key pair there.";
+    }
+    $("generate-key").hidden = Boolean(loaded);
+  }
+
+  $("key-file-path").addEventListener("input", renderKeyFile);
+
+  $("generate-key").addEventListener("click", async () => {
+    showFormError("");
+    try {
+      const result = await post("/api/key-file/generate", { path: $("key-file-path").value.trim() });
+      $("key-file-path").value = result.path;
+    } catch (error) {
+      showFormError(error.message);
+    }
+    refresh();
+  });
+
+  $("identity-source").addEventListener("change", showIdentityFields);
+
+  let templates = [];
+
+  const templateById = id => templates.find(t => t.id === id) ?? templates.find(t => t.id === "custom");
+
+  const formatHeaders = headers => headers.map(h => `${h.name}: ${h.value}`).join("\n");
+
+  function parseHeaders(text) {
+    return text.split("\n").map(line => line.trim()).filter(Boolean).map(line => {
+      const colon = line.indexOf(":");
+      if (colon < 1) throw new Error(`Headers are written as "Name: value"; "${line}" has no name.`);
+      return { name: line.slice(0, colon).trim(), value: line.slice(colon + 1).trim() };
+    });
+  }
+
+  const sameEndpoint = (a, b) => a.trim().replace(/\/+$/, "").toLowerCase() === b.trim().replace(/\/+$/, "").toLowerCase();
+
+  function renderKeyHint() {
+    const template = templateById($("provider").value);
+    const endpoint = form.elements.namedItem("endpoint").value;
+    const known = (latest?.keyEndpoints ?? []).some(e => sameEndpoint(e, endpoint));
+    $("key").placeholder = known ? "Kept from before; leave blank to reuse" : template?.keyPlaceholder ?? "";
+    $("model").placeholder = template?.modelPlaceholder ?? "";
+  }
+
+  function applyTemplate(template) {
+    form.elements.namedItem("endpoint").value = template.endpoint;
+    form.elements.namedItem("chatCompletionsPath").value = template.chatCompletionsPath;
+    form.elements.namedItem("modelsPath").value = template.modelsPath;
+    $("headers").value = formatHeaders(template.headers);
+    form.querySelectorAll("input[name=cap]").forEach(box => box.checked = template.capabilities.includes(box.value));
+    $("model-list").replaceChildren();
+    $("advanced").open = template.id === "custom";
+    renderKeyHint();
+  }
+
+  $("provider").addEventListener("change", () => {
+    $("key").value = "";
+    form.elements.namedItem("model").value = "";
+    applyTemplate(templateById($("provider").value));
+  });
+
+  form.querySelectorAll("[data-template-field]").forEach(field => field.addEventListener("input", () => {
+    const template = templateById($("provider").value);
+    const matches = template && sameEndpoint(template.endpoint, form.elements.namedItem("endpoint").value)
+      && form.elements.namedItem("chatCompletionsPath").value.trim() === template.chatCompletionsPath
+      && form.elements.namedItem("modelsPath").value.trim() === template.modelsPath;
+    if (!matches && $("provider").value !== "custom") $("provider").value = "custom";
+    renderKeyHint();
+  }));
+
+  $("list-models").addEventListener("click", async () => {
+    const status = $("models-status");
+    status.hidden = false;
+    status.className = "muted";
+    status.textContent = "Asking the provider…";
+    $("list-models").disabled = true;
+    try {
+      const response = await fetch("/api/models", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(readForm())
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error ?? `${response.status} ${response.statusText}`);
+      $("model-list").replaceChildren(...data.map(id => Object.assign(document.createElement("option"), { value: id })));
+      status.textContent = data.length ? `${data.length} models; pick one from the model field's suggestions.` : "The provider listed no models.";
+      if (data.length) $("model").focus();
+    } catch (error) {
+      status.className = "error";
+      status.textContent = error.message;
+    } finally {
+      $("list-models").disabled = false;
+    }
+  });
+
+  function fill(settings) {
+    for (const [name, value] of Object.entries(settings)) {
+      const field = form.elements.namedItem(name);
+      if (field instanceof HTMLInputElement || field instanceof HTMLSelectElement) field.value = value ?? "";
+    }
+    $("provider").value = templateById(settings.provider)?.id ?? "custom";
+    $("headers").value = formatHeaders(settings.headers ?? []);
+    form.querySelectorAll("input[name=cap]").forEach(box => box.checked = settings.capabilities.includes(box.value));
+    $("advanced").open = $("provider").value === "custom";
+    showIdentityFields();
+  }
+
+  function readForm() {
+    const field = name => form.elements.namedItem(name).value.trim();
+    return {
+      laneUrl: field("laneUrl"),
+      pool: field("pool"),
+      name: field("name"),
+      concurrency: Number(field("concurrency")),
+      provider: field("provider"),
+      endpoint: field("endpoint"),
+      chatCompletionsPath: field("chatCompletionsPath"),
+      modelsPath: field("modelsPath"),
+      headers: parseHeaders($("headers").value),
+      model: field("model"),
+      apiKey: field("apiKey") || null,
+      capabilities: [...form.querySelectorAll("input[name=cap]:checked")].map(box => box.value),
+      identity: field("identity"),
+      keyFilePath: field("keyFilePath"),
+      securityKeyCredentialId: latest?.settings.securityKeyCredentialId ?? null,
+      securityKeyPublicKey: latest?.settings.securityKeyPublicKey ?? null
+    };
+  }
+
+  async function post(url, body) {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: body ? { "Content-Type": "application/json" } : {},
+      body: body ? JSON.stringify(body) : undefined
+    });
+    if (!response.ok) {
+      let message = `${response.status} ${response.statusText}`;
+      try { message = (await response.json()).error ?? message; } catch { }
+      throw new Error(message);
+    }
+    return response.status === 204 ? null : response.json().catch(() => null);
+  }
+
+  function showFormError(message) {
+    $("form-error").textContent = message;
+    $("form-error").hidden = !message;
+  }
+
+  function describeWebAuthnError(error) {
+    if (!window.PublicKeyCredential) return "This browser does not support security keys.";
+    switch (error.name) {
+      case "NotAllowedError": return "The security key prompt was dismissed or timed out.";
+      case "InvalidStateError": return "That security key is already registered.";
+      case "SecurityError": return "Security keys only work when this page is opened at localhost.";
+      default: return error.message;
+    }
+  }
+
+  form.addEventListener("submit", async event => {
+    event.preventDefault();
+    showFormError("");
+    try {
+      await post("/api/start", readForm());
+      $("key").value = "";
+    } catch (error) {
+      showFormError(error.message);
+    }
+    refresh();
+  });
+
+  $("stop").addEventListener("click", async () => {
+    await post("/api/stop");
+    refresh();
+  });
+
+  $("register").addEventListener("click", async () => {
+    showFormError("");
+    const name = form.elements.namedItem("name").value.trim() || "lane-node";
+    try {
+      const credential = await navigator.credentials.create({
+        publicKey: {
+          challenge: crypto.getRandomValues(new Uint8Array(32)),
+          rp: { name: "Lane node" },
+          user: { id: crypto.getRandomValues(new Uint8Array(16)), name, displayName: name },
+          pubKeyCredParams: [{ type: "public-key", alg: -7 }],
+          authenticatorSelection: { authenticatorAttachment: "cross-platform", residentKey: "discouraged", userVerification: "discouraged" },
+          hints: ["security-key"],
+          attestation: "none",
+          timeout: 120000
+        }
+      });
+      const response = credential.response;
+      if (typeof response.getPublicKey !== "function")
+        throw new Error("This browser cannot read the security key's public key; try a current Chrome, Safari or Firefox.");
+      await post("/api/security-key/register", {
+        credentialId: toBase64Url(credential.rawId),
+        publicKey: toBase64Url(response.getPublicKey()),
+        algorithm: response.getPublicKeyAlgorithm()
+      });
+    } catch (error) {
+      showFormError(error instanceof DOMException ? describeWebAuthnError(error) : error.message);
+    }
+    refresh();
+  });
+
+  async function useSecurityKey(touch) {
+    if (touching || !touch) return;
+    touching = true;
+    $("touch-error").hidden = true;
+    $("touch-retry").disabled = true;
+    try {
+      const credential = await navigator.credentials.get({
+        publicKey: {
+          challenge: fromBase64Url(touch.challenge),
+          allowCredentials: [{ type: "public-key", id: fromBase64Url(touch.credentialId), transports: ["usb", "nfc"] }],
+          userVerification: "discouraged",
+          hints: ["security-key"],
+          timeout: 120000
+        }
+      });
+      const response = credential.response;
+      await post("/api/security-key/assert", {
+        authenticatorData: toBase64Url(response.authenticatorData),
+        clientDataJson: toBase64Url(response.clientDataJSON),
+        signature: toBase64Url(response.signature)
+      });
+    } catch (error) {
+      $("touch-error").textContent = error instanceof DOMException ? describeWebAuthnError(error) : error.message;
+      $("touch-error").hidden = false;
+    } finally {
+      touching = false;
+      $("touch-retry").disabled = false;
+    }
+    refresh();
+  }
+
+  dialog.addEventListener("cancel", event => event.preventDefault());
+  $("touch-retry").addEventListener("click", () => useSecurityKey(latest?.touch));
+  $("touch-stop").addEventListener("click", async () => {
+    await post("/api/stop");
+    refresh();
+  });
+
+  async function refresh() {
+    let state;
+    try {
+      state = await (await fetch("/api/state")).json();
+    } catch {
+      $("status").dataset.status = "Failed";
+      $("status-text").textContent = "Node app unreachable";
+      return;
+    }
+
+    latest = state;
+
+    if (!filled) {
+      templates = state.templates;
+      $("provider").replaceChildren(...templates.map(t => Object.assign(document.createElement("option"), { value: t.id, textContent: t.label })));
+      fill(state.settings);
+      filled = true;
+    }
+
+    renderKeyHint();
+
+    $("status").dataset.status = state.status;
+    $("status-text").textContent = STATUS_TEXT[state.status] ?? state.status;
+    $("detail").textContent = state.detail ?? "—";
+    $("identity").textContent = state.identity ? state.identity.keyId : "—";
+    $("connection").textContent = state.connectionId ?? "—";
+    $("counts").textContent = `${state.answered} answered, ${state.failed} failed`;
+
+    $("registered").innerHTML = "";
+    if (state.registeredKeyId) {
+      const code = document.createElement("code");
+      code.textContent = state.registeredKeyId;
+      $("registered").append("Registered: ", code);
+    } else {
+      $("registered").textContent = "No security key registered.";
+    }
+    $("register").textContent = state.registeredKeyId ? "Replace security key" : "Register security key";
+    renderKeyFile();
+
+    const running = state.status !== "Stopped" && state.status !== "Failed";
+    $("start").textContent = running ? "Restart" : "Start";
+    $("stop").disabled = !running;
+
+    const logs = $("logs");
+    const pinned = logs.scrollTop + logs.clientHeight >= logs.scrollHeight - 4;
+    logs.textContent = state.logs.join("\n");
+    if (pinned) logs.scrollTop = logs.scrollHeight;
+
+    if (state.touch) {
+      if (!dialog.open) {
+        $("touch-error").hidden = true;
+        dialog.showModal();
+      }
+      if (attemptedChallenge !== state.touch.challenge) {
+        attemptedChallenge = state.touch.challenge;
+        useSecurityKey(state.touch);
+      }
+    } else if (dialog.open) {
+      dialog.close();
+    }
+  }
+
+  refresh();
+  setInterval(refresh, 1000);
+</script>
+</body>
+</html>

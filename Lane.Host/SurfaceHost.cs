@@ -21,6 +21,13 @@ public sealed class SurfaceHost(
 {
     private ISurface? _surface;
 
+    public SurfaceId Id => id;
+
+    public bool Running => _surface is not null;
+
+    /// <summary>Null until it has started, and if starting failed.</summary>
+    public ISurface? Surface => _surface;
+
     public async Task StartAsync(CancellationToken ct)
     {
         try

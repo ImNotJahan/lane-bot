@@ -17,6 +17,9 @@ public sealed record ApiClient(
     Participant Participant,
     bool CanObserveAllSessions)
 {
+    /// <summary>Set for clients created in the node portal, whose requests are paid for by their sponsors.</summary>
+    public string? SponsoredId { get; init; }
+
     /// <summary>
     /// Session keys are namespaced by client, so two apps naming a conversation "main" get
     /// two conversations. Sharing one is opt-in, and looks like it.
@@ -62,6 +65,11 @@ public sealed class ApiClientRegistry
     private readonly Dictionary<string, ApiClient> _byId;
     private readonly List<(byte[] Key, ApiClient Client)> _keys = [];
     private readonly ApiClient? _anonymous;
+    private readonly SurfaceId _surface;
+    private readonly IIdentityResolver _identity;
+
+    /// <summary>Prepended to sponsored client ids, so they never share a session namespace with a configured client.</summary>
+    public const string SponsoredPrefix = "sponsored.";
 
     public ApiClientRegistry(
         SurfaceId surface,
@@ -69,7 +77,9 @@ public sealed class ApiClientRegistry
         bool allowAnonymous,
         IIdentityResolver identity)
     {
-        _byId = new Dictionary<string, ApiClient>(StringComparer.OrdinalIgnoreCase);
+        _byId     = new Dictionary<string, ApiClient>(StringComparer.OrdinalIgnoreCase);
+        _surface  = surface;
+        _identity = identity;
 
         foreach (ApiClientOptions options in clients)
         {
@@ -79,6 +89,10 @@ public sealed class ApiClientRegistry
             if (!ApiKeys.IsValid(options.Id))
                 throw new InvalidOperationException(
                     $"API client id '{options.Id}' must be letters, digits, '-', '_' or '.'.");
+
+            if (options.Id.StartsWith(SponsoredPrefix, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException(
+                    $"API client id '{options.Id}' cannot start with '{SponsoredPrefix}'.");
 
             if (string.IsNullOrWhiteSpace(options.Key))
                 throw new InvalidOperationException(
@@ -107,7 +121,19 @@ public sealed class ApiClientRegistry
 
     public bool AllowsAnonymous => _anonymous is not null;
 
+    public ApiClient? Anonymous => _anonymous;
+
     public int Count => _byId.Count;
+
+    public ApiClient Sponsored(Lane.Core.Credits.SponsoredApiClient sponsored)
+    {
+        string id = SponsoredPrefix + sponsored.Id;
+
+        return new ApiClient(id, sponsored.Name, _identity.Resolve(new ParticipantId(_surface, id), sponsored.Name), false)
+        {
+            SponsoredId = sponsored.Id
+        };
+    }
 
     /// <summary>
     /// An explicitly configured <c>GlobalUserId</c> wins over the identity map: the map is
@@ -125,9 +151,12 @@ public sealed class ApiClientRegistry
             : new Participant(id, name, options.GlobalUserId);
     }
 
-    public ApiClient? Authenticate(string? presented)
+    public ApiClient? Authenticate(string? presented) => Match(presented) ?? _anonymous;
+
+    /// <summary>The configured client holding this key, ignoring anonymous access.</summary>
+    public ApiClient? Match(string? presented)
     {
-        if (string.IsNullOrEmpty(presented)) return _anonymous;
+        if (string.IsNullOrEmpty(presented)) return null;
 
         byte[] offered = Encoding.UTF8.GetBytes(presented);
 
@@ -138,6 +167,6 @@ public sealed class ApiClientRegistry
         foreach ((byte[] key, ApiClient client) in _keys)
             if (CryptographicOperations.FixedTimeEquals(key, offered)) matched = client;
 
-        return matched ?? _anonymous;
+        return matched;
     }
 }

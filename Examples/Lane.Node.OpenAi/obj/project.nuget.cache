@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "dgSpecHash": "1JOob2uwfwU=",
+  "success": true,
+  "projectFilePath": "/Users/jahan/Documents/Programming/Bots/wizard_mk2/Examples/Lane.Node.OpenAi/Lane.Node.OpenAi.csproj",
+  "expectedPackageFiles": [
+    "/Users/jahan/.nuget/packages/anthropic/12.11.0/anthropic.12.11.0.nupkg.sha512",
+    "/Users/jahan/.nuget/packages/microsoft.extensions.ai.abstractions/10.4.0/microsoft.extensions.ai.abstractions.10.4.0.nupkg.sha512"
+  ],
+  "logs": []
+}

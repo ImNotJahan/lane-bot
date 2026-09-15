@@ -1,3 +1,4 @@
+using Lane.Core.Credits;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -21,7 +22,11 @@ public static class ApiAuth
 
         ApiClientRegistry clients = context.RequestServices.GetRequiredService<ApiClientRegistry>();
 
-        ApiClient? client = clients.Authenticate(Presented(context));
+        string? presented = Presented(context);
+
+        ApiClient? client = clients.Match(presented)
+            ?? await SponsoredAsync(context, clients, presented).ConfigureAwait(false)
+            ?? clients.Anonymous;
 
         if (client is null)
         {
@@ -45,6 +50,29 @@ public static class ApiAuth
 
     public static ApiClient Require(HttpContext context) =>
         Current(context) ?? throw new InvalidOperationException("No authenticated client on this request.");
+
+    /// <summary>Charges a sponsored client's sponsors for one request. Always true for configured clients.</summary>
+    public static async ValueTask<bool> ChargeAsync(HttpContext context, ApiClient client, CancellationToken ct) =>
+        client.SponsoredId is null ||
+        context.RequestServices.GetService<ISponsoredAccess>() is { } access &&
+        await access.TryChargeAsync(SponsoredKind.ApiClient, client.SponsoredId, ct).ConfigureAwait(false);
+
+    public static IResult OutOfCredits(ApiClient client) =>
+        Results.Json(
+            new ErrorResponse("out_of_credits", $"Nobody sponsoring '{client.SponsoredId}' has credits left to spend on it today."),
+            ApiJson.Options,
+            statusCode: StatusCodes.Status402PaymentRequired);
+
+    private static async ValueTask<ApiClient?> SponsoredAsync(HttpContext context, ApiClientRegistry clients, string? presented)
+    {
+        if (string.IsNullOrEmpty(presented)) return null;
+
+        if (context.RequestServices.GetService<ISponsoredAccess>() is not { } access) return null;
+
+        return await access.FindApiClientAsync(presented, context.RequestAborted).ConfigureAwait(false) is { } sponsored
+            ? clients.Sponsored(sponsored)
+            : null;
+    }
 
     private static string? Presented(HttpContext context)
     {

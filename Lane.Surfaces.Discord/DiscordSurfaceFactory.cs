@@ -1,4 +1,5 @@
 using Lane.Audio;
+using Lane.Core.Credits;
 using Lane.Core.Events;
 using Lane.Core.Identity;
 using Lane.Core.Kernel;
@@ -38,6 +39,7 @@ public sealed class DiscordSurfaceFactory(IDiscordTokenSource tokens) : ISurface
             services.GetRequiredService<IIdentityResolver>(),
             services.GetRequiredService<IEventBus>(),
             services.GetRequiredService<ILogger<DiscordSurface>>(),
-            services.GetService<AudioRouter>());
+            services.GetService<AudioRouter>(),
+            services.GetService<ISponsoredAccess>());
     }
 }

@@ -1,0 +1,1091 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Church of Lane</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #1e1e1e; --panel: #333333; --text: #999999; --bright: #cccccc; --muted: #777777;
+    --border: #555555; --input-border: #666666; --accent: #32dd72; --subject: #446655;
+    --ok: #32dd72; --warn: #dddd57; --bad: #dd5757;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; position: relative; font: 12px/1.45 sans-serif; color: var(--text);
+    background: var(--bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96'%3E%3Cpath d='M24.5 16v16M20 21.5h9M72.5 64v16M68 69.5h9' stroke='%232e2e2e' fill='none'/%3E%3Cpath d='M72 24h1v1h-1zM24 72h1v1h-1z' fill='%232a2a2a'/%3E%3C/svg%3E") fixed;
+  }
+  body::before {
+    content: ""; position: fixed; inset: 0; pointer-events: none;
+    background:
+      repeating-linear-gradient(0deg, rgba(0, 0, 0, .14) 0 1px, transparent 1px 3px),
+      radial-gradient(ellipse at center, transparent 50%, rgba(0, 0, 0, .5));
+  }
+  header, main { position: relative; z-index: 1; }
+  .sanctum { position: absolute; inset: 0 0 auto 0; height: 420px; overflow: hidden; pointer-events: none; }
+  .rose { position: absolute; left: 50%; top: -285px; width: 680px; height: 680px; margin-left: -340px; fill: none; stroke: var(--accent); stroke-width: 1.2; opacity: .08; shape-rendering: crispEdges; }
+  .rose .guide { stroke-dasharray: 6 4 1 4; }
+  .rose .ticks { stroke-width: 10; stroke-dasharray: 1.2 13.51; }
+  .litany { position: fixed; top: 50%; font: 10px monospace; letter-spacing: .45em; color: #3a3a3a; writing-mode: vertical-rl; white-space: nowrap; pointer-events: none; user-select: none; }
+  .litany.left { left: 10px; transform: translateY(-50%) rotate(180deg); }
+  .litany.right { right: 10px; transform: translateY(-50%); }
+  @media (max-width: 1040px) { .litany { display: none; } }
+  a:link, a:visited { color: var(--bright); text-decoration: none; }
+  a:hover { color: #ffffff; }
+  .top { padding: 6px 12px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; }
+  nav { grid-column: 2; display: flex; flex-wrap: wrap; justify-content: center; }
+  nav::before { content: "["; margin-right: .4em; }
+  nav::after { content: "]"; margin-left: .4em; }
+  nav a + a::before { content: "/"; color: var(--text); margin: 0 .4em; }
+  nav a[aria-current=page] { color: var(--accent); }
+  .who { grid-column: 3; justify-self: end; display: flex; align-items: center; gap: 8px; }
+  .masthead { display: flex; justify-content: center; align-items: center; gap: 10px; margin: 12px 0 4px; }
+  .brand { font: 20pt tahoma, sans-serif; letter-spacing: -2px; color: var(--accent); text-shadow: 0 0 10px rgba(50, 221, 114, .35); }
+  .wing { width: 72px; height: 36px; fill: none; stroke: var(--accent); stroke-width: 1; stroke-linecap: square; opacity: .5; shape-rendering: crispEdges; }
+  .wing path { vector-effect: non-scaling-stroke; }
+  .wing.right { transform: scaleX(-1); }
+  .tagline { color: var(--muted); font-size: 10px; margin-top: 2px; }
+  hr { height: 0; border: 0; border-top: 1px solid var(--panel); margin: 10px 0; }
+  main { max-width: 960px; margin: 0 auto; padding: 8px 12px 48px; display: grid; gap: 12px; }
+  h1 { font: bold 14px sans-serif; color: var(--accent); margin: 0; }
+  h2 { font: bold 12px sans-serif; background: var(--accent); color: #000000; padding: 2px 6px; margin: -8px -8px 8px; }
+  p { margin: 0; }
+  .muted { color: var(--muted); }
+  .panel { background: var(--panel); border: 1px solid var(--border); padding: 8px; }
+  .page { display: grid; gap: 12px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+  label { display: grid; gap: 2px; font-weight: bold; color: #aaaaaa; }
+  textarea { resize: vertical; }
+  input, select, textarea { font: 10pt sans-serif; color: var(--bright); background: var(--panel); border: 1px solid var(--input-border); border-radius: 0; padding: 3px 5px; min-width: 0; }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: #aaaaaa; }
+  button { font: 12px sans-serif; border-radius: 0; padding: 3px 10px; border: 1px solid #888888; background: var(--panel); color: var(--bright); cursor: pointer; }
+  button:hover:not(:disabled) { background: var(--border); color: var(--accent); }
+  button.primary { color: var(--accent); }
+  button.small { padding: 1px 6px; font-size: 11px; }
+  button:disabled { opacity: .5; cursor: default; }
+  .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: end; }
+  .table-wrap { overflow-x: auto; }
+  .table-wrap > h2 { margin: 0 0 8px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 3px 6px; white-space: nowrap; }
+  th { font-weight: bold; color: #aaaaaa; border-bottom: 1px solid var(--border); }
+  tbody tr:nth-child(even) { background: #2c2c2c; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  code { font-family: monospace; font-size: 12px; color: var(--bright); }
+  .rank { font-weight: bold; width: 3em; }
+  .name strong { font-weight: 800; color: var(--accent); }
+  .name .sub { color: var(--muted); margin-left: 6px; }
+  .dot { display: inline-block; width: 8px; height: 8px; background: #1e1e1e; border: 1px solid var(--input-border); vertical-align: middle; }
+  .dot.on { background: var(--ok); border-color: var(--ok); }
+  .big { font-size: 32px; font-weight: bold; line-height: 1.1; color: var(--bright); font-variant-numeric: tabular-nums; }
+  .face { font-family: monospace; font-size: 32px; line-height: 1.2; color: var(--accent); overflow-wrap: anywhere; }
+  .meter { height: 8px; background: var(--bg); border: 1px solid var(--input-border); margin: 8px 0 4px; }
+  .meter span { display: block; height: 100%; background: var(--ok); }
+  .meter[data-tier=Tired] span { background: var(--warn); }
+  .meter[data-tier=Weary] span { background: var(--bad); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; }
+  .chip::before { content: "["; }
+  .chip::after { content: "]"; }
+  .amount-in { color: var(--ok); }
+  .amount-out { color: var(--bad); }
+  .error { color: var(--bad); }
+  .success { color: var(--ok); }
+  .notice { color: var(--warn); }
+  .sign-in { display: grid; gap: 8px; justify-items: start; }
+  .key-icon { width: 32px; height: 32px; color: var(--accent); }
+  .empty { padding: 16px 0; text-align: center; color: var(--muted); }
+  .page-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .page-head h1 { flex: 1; }
+  .page-head label { display: flex; align-items: center; gap: 6px; }
+  .back::before { content: "["; color: var(--text); margin-right: .3em; }
+  .back::after { content: "]"; color: var(--text); margin-left: .3em; }
+  a.back:link, a.back:visited { color: var(--bright); }
+  .forum-item { display: grid; gap: 2px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+  a.forum-item:link, a.forum-item:visited { color: var(--text); }
+  .forum-item:first-child { padding-top: 0; }
+  .forum-item:last-child { border-bottom: none; padding-bottom: 0; }
+  .forum-item:hover .forum-title { color: var(--accent); }
+  .forum-title { font-weight: 800; color: var(--subject); overflow-wrap: anywhere; }
+  .forum-excerpt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .forum-meta { color: var(--muted); }
+  .forum-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .forum-text a { text-decoration: underline; }
+  h1.forum-text { color: var(--subject); font-size: 12px; font-weight: 800; }
+  .comment { display: grid; gap: 2px; padding: 6px 8px; margin-bottom: 4px; background: var(--bg); border: 1px solid var(--border); width: fit-content; max-width: 100%; }
+  .comment:last-child { margin-bottom: 0; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="sanctum" aria-hidden="true">
+  <svg class="rose" viewBox="-300 -300 600 600">
+    <defs>
+      <g id="petal">
+        <path d="M0 -96L14 -150L10 -222L0 -266L-10 -222L-14 -150Z"/>
+        <path d="M0 -40V-92M0 -150V-222M-6 -186H6"/>
+        <path d="M0 -240L16 -215L0 -190L-16 -215ZM0 -289L8 -281L0 -273L-8 -281Z" transform="rotate(15)"/>
+      </g>
+    </defs>
+    <circle r="292"/><circle r="270"/><circle class="ticks" r="281"/><circle class="guide" r="245"/><circle r="200"/>
+    <circle class="guide" r="150"/><circle r="92"/><circle r="40"/>
+    <path class="guide" d="M-300 0H300M0 -300V300M-212 -212L212 212M212 -212L-212 212"/>
+    <use href="#petal"/>
+    <use href="#petal" transform="rotate(30)"/>
+    <use href="#petal" transform="rotate(60)"/>
+    <use href="#petal" transform="rotate(90)"/>
+    <use href="#petal" transform="rotate(120)"/>
+    <use href="#petal" transform="rotate(150)"/>
+    <use href="#petal" transform="rotate(180)"/>
+    <use href="#petal" transform="rotate(210)"/>
+    <use href="#petal" transform="rotate(240)"/>
+    <use href="#petal" transform="rotate(270)"/>
+    <use href="#petal" transform="rotate(300)"/>
+    <use href="#petal" transform="rotate(330)"/>
+    <path d="M0 -30V30M-18 -12H18"/>
+  </svg>
+</div>
+<header>
+  <div class="top">
+    <nav id="nav">
+      <a href="#leaderboard">leaderboard</a>
+      <a href="#nickname">nickname</a>
+      <a href="#wallet">wallet</a>
+      <a href="#stats">stats</a>
+      <a href="#sponsor">sponsor</a>
+      <a href="#forum">forum</a>
+    </nav>
+    <span class="who" id="who" hidden>
+      <span>Signed in as <strong id="who-name"></strong></span>
+      <button class="small" id="sign-out">Sign out</button>
+    </span>
+  </div>
+  <hr>
+</header>
+
+<main>
+  <section class="page" data-page="leaderboard" hidden>
+    <h1>Leaderboard</h1>
+    <div class="panel table-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Identity</th><th>Key</th><th class="num">Responses</th><th>Online</th></tr></thead>
+        <tbody id="leaderboard-rows"></tbody>
+      </table>
+      <p class="empty" id="leaderboard-empty" hidden>No node has answered a request yet.</p>
+    </div>
+  </section>
+
+  <section class="page" data-page="nickname" hidden>
+    <h1>Nickname</h1>
+    <div class="panel sign-in" data-signed-out></div>
+    <form class="panel" id="nickname-form" data-signed-in hidden>
+      <h2>Your identity</h2>
+      <p>Key <code id="nickname-key"></code></p>
+      <div class="row" style="margin-top: 12px">
+        <label style="flex: 1">Nickname <input id="nickname-input" maxlength="32" autocomplete="off"></label>
+        <button class="primary" type="submit">Save</button>
+        <button type="button" id="nickname-clear">Clear</button>
+      </div>
+      <p class="muted" style="margin-top: 8px">Shown across the site</p>
+      <p id="nickname-status" hidden style="margin-top: 8px"></p>
+    </form>
+  </section>
+
+  <section class="page" data-page="wallet" hidden>
+    <h1>Wallet</h1>
+    <div class="panel sign-in" data-signed-out></div>
+    <div class="grid" data-signed-in hidden>
+      <div class="panel">
+        <h2>Balance</h2>
+        <div class="big" id="balance">0</div>
+        <p class="muted">you gain 1 credit for every response your nodes answer</p>
+      </div>
+      <form class="panel" id="transfer-form">
+        <h2>Send credits</h2>
+        <div style="display: grid; gap: 10px">
+          <label>To <select id="transfer-to" required></select></label>
+          <label>Amount <input id="transfer-amount" type="number" min="1" step="1" required></label>
+          <label>Note <input id="transfer-memo" maxlength="140" autocomplete="off"></label>
+          <div class="row"><button class="primary" type="submit">Send</button></div>
+          <p id="transfer-status" hidden></p>
+        </div>
+      </form>
+    </div>
+    <div class="panel table-wrap" data-signed-in hidden>
+      <h2>History</h2>
+      <table>
+        <thead><tr><th>When</th><th>What</th><th class="num">Credits</th></tr></thead>
+        <tbody id="history-rows"></tbody>
+      </table>
+      <p class="empty" id="history-empty" hidden>No credits yet.</p>
+    </div>
+  </section>
+
+  <section class="page" data-page="stats" hidden>
+    <h1>Stats</h1>
+    <div class="grid">
+      <div class="panel">
+        <h2>Surfaces</h2>
+        <div class="big" id="stat-surfaces">–</div>
+        <div class="chips" id="stat-surface-list"></div>
+      </div>
+      <div class="panel">
+        <h2>Current face</h2>
+        <div class="face" id="stat-face">–</div>
+      </div>
+      <div class="panel">
+        <h2>Energy</h2>
+        <div id="stat-energy-on">
+          <div class="big" id="stat-energy">–</div>
+          <div class="meter" id="stat-energy-meter"><span></span></div>
+          <p class="muted" id="stat-energy-detail"></p>
+        </div>
+        <p class="muted" id="stat-energy-off" hidden>Energy tracking is turned off.</p>
+      </div>
+      <div class="panel">
+        <h2>API clients</h2>
+        <div class="big" id="stat-api-clients">–</div>
+      </div>
+      <div class="panel">
+        <h2>Discord channels</h2>
+        <div class="big" id="stat-discord-channels">–</div>
+        <p class="muted" id="stat-discord-detail"></p>
+      </div>
+      <div class="panel">
+        <h2>Nodes online</h2>
+        <div class="big" id="stat-nodes">–</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="page" data-page="sponsor" hidden>
+    <h1>Sponsor</h1>
+    <div class="panel sign-in" data-signed-out></div>
+    <div class="grid" data-signed-in hidden>
+      <form class="panel" id="sponsor-form">
+        <h2>Sponsor a channel or client</h2>
+        <div style="display: grid; gap: 10px">
+          <label>What
+            <select id="sponsor-kind">
+              <option value="DiscordChannel">Discord channel</option>
+              <option value="ApiClient">API client</option>
+            </select>
+          </label>
+          <label><span id="sponsor-target-label">Channel id</span> <input id="sponsor-target" required autocomplete="off"></label>
+          <label id="sponsor-name-row" hidden>Name, for a new client <input id="sponsor-name" maxlength="64" autocomplete="off"></label>
+          <label>Daily limit <input id="sponsor-limit" type="number" min="0" step="1" placeholder="No limit"></label>
+          <div class="row"><button class="primary" type="submit">Sponsor</button></div>
+          <p id="sponsor-status" hidden></p>
+          <div id="sponsor-key" hidden>
+            <p class="notice">Copy this client key now; it will not be shown again.</p>
+            <div class="row" style="margin-top: 6px">
+              <input id="sponsor-key-value" readonly style="flex: 1; font-family: ui-monospace, Menlo, monospace">
+              <button type="button" class="small" id="sponsor-key-copy">Copy</button>
+            </div>
+          </div>
+        </div>
+      </form>
+      <div class="panel">
+        <h2>How it works</h2>
+        <p>While you sponsor something, Lane listens there and each message or request costs <strong id="sponsor-cost">1</strong> credit.</p>
+        <p class="muted" style="margin-top: 8px">Sponsors take turns paying, and Lane will keep running in the sponsored chat unless all sponsors run out of credits.</p>
+        <p class="muted" style="margin-top: 8px">Your balance: <strong id="sponsor-balance">0</strong> credits</p>
+      </div>
+    </div>
+    <div class="panel table-wrap" data-signed-in hidden>
+      <h2>Yours</h2>
+      <table>
+        <thead><tr><th>Listening</th><th>What</th><th>Daily limit</th><th class="num">Today</th><th class="num">Total</th><th class="num">Sponsors</th><th></th></tr></thead>
+        <tbody id="sponsor-mine-rows"></tbody>
+      </table>
+      <p class="empty" id="sponsor-mine-empty" hidden>You are not sponsoring anything.</p>
+    </div>
+    <div class="panel table-wrap" data-signed-in hidden>
+      <h2>Everything sponsored</h2>
+      <table>
+        <thead><tr><th>Listening</th><th>What</th><th>Sponsors</th><th></th></tr></thead>
+        <tbody id="sponsor-all-rows"></tbody>
+      </table>
+      <p class="empty" id="sponsor-all-empty" hidden>Nobody is sponsoring anything yet.</p>
+    </div>
+  </section>
+
+  <section class="page" data-page="forum" hidden>
+    <div class="page" id="forum-list">
+      <div class="page-head">
+        <h1>Forum</h1>
+        <label>Sort
+          <select id="forum-sort">
+            <option value="bumped">Last bumped</option>
+            <option value="newest">Newest</option>
+          </select>
+        </label>
+      </div>
+      <div class="panel">
+        <div id="forum-posts"></div>
+        <p class="empty" id="forum-empty" hidden>No posts yet.</p>
+      </div>
+      <form class="panel" id="forum-post-form" data-signed-in hidden>
+        <h2>New post</h2>
+        <div style="display: grid; gap: 10px">
+          <label>Title <input id="forum-title" maxlength="120" required autocomplete="off"></label>
+          <label>Description <textarea id="forum-description" maxlength="10000" rows="5" required></textarea></label>
+          <div class="row"><button class="primary" type="submit">Post</button></div>
+          <p id="forum-post-status" hidden></p>
+        </div>
+      </form>
+      <div class="panel sign-in" data-signed-out></div>
+    </div>
+
+    <div class="page" id="forum-thread" hidden>
+      <a class="back" href="#forum">← All posts</a>
+      <p class="error" id="forum-thread-error" hidden></p>
+      <article class="panel" style="display: grid; gap: 8px">
+        <h1 class="forum-text" id="forum-thread-title"></h1>
+        <p class="forum-meta" id="forum-thread-meta"></p>
+        <p class="forum-text" id="forum-thread-description"></p>
+      </article>
+      <div class="panel">
+        <h2 id="forum-comments-heading">Comments</h2>
+        <div id="forum-comments"></div>
+        <p class="empty" id="forum-comments-empty" hidden>No comments yet.</p>
+      </div>
+      <form class="panel" id="forum-comment-form" data-signed-in hidden>
+        <h2>Comment</h2>
+        <div style="display: grid; gap: 10px">
+          <textarea id="forum-comment-body" maxlength="10000" rows="4" required aria-label="Comment"></textarea>
+          <div class="row"><button class="primary" type="submit">Comment</button></div>
+          <p id="forum-comment-status" hidden></p>
+        </div>
+      </form>
+      <div class="panel sign-in" data-signed-out></div>
+    </div>
+  </section>
+</main>
+
+<template id="sign-in-template">
+  <p>Sign in with either your hardware key or key pair (the same one you use for your node)</p>
+  <div class="row">
+    <button class="primary" type="button" data-sign-in>Sign in with security key</button>
+    <button type="button" data-key-sign-in>Sign in with key pair file</button>
+    <input type="file" accept=".pem,.key,text/plain" data-key-file hidden>
+  </div>
+  <p class="notice" data-host-notice hidden>
+    Security keys only work when this page is opened at localhost: through your node app at
+    <code>http://localhost:5075/lane/</code>, or at localhost on Lane's own machine.
+  </p>
+  <p class="error" data-sign-in-error hidden></p>
+</template>
+
+<script>
+  const PAGES = ["leaderboard", "nickname", "wallet", "stats", "sponsor", "forum"];
+  const TOKEN_KEY = "lane-portal-token";
+  const FORUM_SORT_KEY = "lane-portal-forum-sort";
+  const $ = id => document.getElementById(id);
+
+  let token = readToken();
+  let wallet = null;
+  let leaderboard = [];
+  let timer = null;
+
+  function readToken() {
+    try { return sessionStorage.getItem(TOKEN_KEY); } catch { return null; }
+  }
+
+  function setToken(value) {
+    token = value;
+    try { value ? sessionStorage.setItem(TOKEN_KEY, value) : sessionStorage.removeItem(TOKEN_KEY); } catch { }
+    if (!value) wallet = null;
+    renderSignedIn();
+  }
+
+  const toBase64Url = buffer =>
+    btoa(String.fromCharCode(...new Uint8Array(buffer))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+  const fromBase64Url = text =>
+    Uint8Array.from(atob(text.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((text.length + 3) % 4)), c => c.charCodeAt(0));
+
+  async function api(path, { method = "GET", body } = {}) {
+    const headers = {};
+    if (body !== undefined) headers["Content-Type"] = "application/json";
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const response = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    let data = null;
+    try { data = await response.json(); } catch { }
+    if (response.status === 401 && path.startsWith("api/me")) setToken(null);
+    if (!response.ok) throw new Error(data?.error ?? `${response.status} ${response.statusText}`);
+    return data;
+  }
+
+  function showMessage(element, message, kind) {
+    element.textContent = message ?? "";
+    element.className = kind;
+    element.hidden = !message;
+  }
+
+  function describeWebAuthnError(error) {
+    switch (error.name) {
+      case "NotAllowedError": return "The security key prompt was dismissed, timed out, or the key is not one a node has used.";
+      case "SecurityError": return "Security keys only work when this page is opened at localhost.";
+      default: return error.message;
+    }
+  }
+
+  function formatWhen(iso) {
+    return new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  }
+
+  function nameCell(identity) {
+    const cell = document.createElement("td");
+    cell.className = "name";
+    const strong = document.createElement("strong");
+    strong.textContent = identity.name;
+    cell.append(strong);
+    if (identity.nickname && identity.nodeName) {
+      const sub = document.createElement("span");
+      sub.className = "sub";
+      sub.textContent = identity.nodeName;
+      cell.append(sub);
+    }
+    return cell;
+  }
+
+  function cell(text, className) {
+    const td = document.createElement("td");
+    td.textContent = text;
+    if (className) td.className = className;
+    return td;
+  }
+
+  // Sign-in
+
+  const SIGN_IN_PREFIX = new TextEncoder().encode("lane-portal-sign-in\n");
+  const P256_SPKI_PREFIX = Uint8Array.from("3059301306072a8648ce3d020106082a8648ce3d030107034200".match(/../g), h => parseInt(h, 16));
+
+  const localNode = fetch("../api/state").then(r => r.ok ? r.json() : null).catch(() => null);
+  const localKeyPair = localNode.then(state => state?.settings?.identity === "KeyFile" && Boolean(state.keyFileId));
+
+  for (const slot of document.querySelectorAll("[data-signed-out]")) {
+    slot.append($("sign-in-template").content.cloneNode(true));
+    slot.querySelector("[data-host-notice]").hidden = location.hostname === "localhost";
+    const button = slot.querySelector("[data-sign-in]");
+    const keyButton = slot.querySelector("[data-key-sign-in]");
+    const keyFile = slot.querySelector("[data-key-file]");
+    const error = slot.querySelector("[data-sign-in-error]");
+    button.addEventListener("click", () => signIn(button, error));
+    keyButton.addEventListener("click", async () => {
+      if (await localKeyPair) keySignIn(keyButton, error, null);
+      else keyFile.click();
+    });
+    keyFile.addEventListener("change", () => {
+      const file = keyFile.files[0];
+      keyFile.value = "";
+      if (file) keySignIn(keyButton, error, file);
+    });
+    localKeyPair.then(local => {
+      if (local) keyButton.textContent = "Sign in with this node's key pair";
+    });
+  }
+
+  async function localCredentialId() {
+    return (await localNode)?.settings?.securityKeyCredentialId ?? null;
+  }
+
+  async function signedIn(value) {
+    setToken(value);
+    await loadWallet();
+    if (location.hash === "#sponsor") loadSponsorships();
+  }
+
+  async function keySignIn(button, error, file) {
+    error.hidden = true;
+    button.disabled = true;
+    try {
+      const { challenge } = await api("api/sign-in/challenge", { method: "POST" });
+      const answer = file ? await signWithFile(file, challenge) : await signWithNode(challenge);
+      const result = await api("api/sign-in/key", { method: "POST", body: { challenge, ...answer } });
+      await signedIn(result.token);
+    } catch (e) {
+      showMessage(error, e.message, "error");
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  async function signWithNode(challenge) {
+    const response = await fetch("../api/key-file/sign-in", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ challenge })
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(data?.error ?? "Your node app could not sign in with its key pair.");
+    return data;
+  }
+
+  // The private key never leaves the browser; only the public key and the signature are sent.
+  async function signWithFile(file, challenge) {
+    if (!crypto.subtle) throw new Error("Browsers only allow key files on https:// pages or at localhost.");
+    const pem = await file.text();
+    if (pem.includes("BEGIN ENCRYPTED PRIVATE KEY")) throw new Error("Encrypted key files are not supported.");
+    if (pem.includes("BEGIN EC PRIVATE KEY"))
+      throw new Error("Convert this key to PKCS#8 first: openssl pkcs8 -topk8 -nocrypt -in old.pem -out node-key.pem");
+    const body = pem.match(/-----BEGIN PRIVATE KEY-----([\s\S]+?)-----END PRIVATE KEY-----/);
+    if (!body) throw new Error("That file is not a PEM private key.");
+    let key;
+    try {
+      const der = Uint8Array.from(atob(body[1].replace(/\s+/g, "")), c => c.charCodeAt(0));
+      key = await crypto.subtle.importKey("pkcs8", der, { name: "ECDSA", namedCurve: "P-256" }, true, ["sign"]);
+    } catch {
+      throw new Error("That file does not hold a P-256 private key.");
+    }
+    const { x, y } = await crypto.subtle.exportKey("jwk", key);
+    const publicKey = new Uint8Array([...P256_SPKI_PREFIX, 4, ...fromBase64Url(x), ...fromBase64Url(y)]);
+    const signature = await crypto.subtle.sign(
+      { name: "ECDSA", hash: "SHA-256" }, key, new Uint8Array([...SIGN_IN_PREFIX, ...fromBase64Url(challenge)]));
+    return { publicKey: toBase64Url(publicKey), signature: toBase64Url(signature) };
+  }
+
+  async function signIn(button, error) {
+    error.hidden = true;
+    button.disabled = true;
+    try {
+      if (!window.PublicKeyCredential) throw new Error("This browser does not support security keys.");
+      const { challenge, credentialIds } = await api("api/sign-in/challenge", { method: "POST" });
+      const local = await localCredentialId();
+      const ids = [...new Set(local ? [...credentialIds, local] : credentialIds)];
+      if (ids.length === 0)
+        throw new Error("Lane doesn't know your security key yet. Open this page through your node app at http://localhost:5075/lane/, or restart your node.");
+      const credential = await navigator.credentials.get({
+        publicKey: {
+          challenge: fromBase64Url(challenge),
+          allowCredentials: ids.map(id => ({ type: "public-key", id: fromBase64Url(id), transports: ["usb", "nfc"] })),
+          userVerification: "discouraged",
+          hints: ["security-key"],
+          timeout: 120000
+        }
+      });
+      const response = credential.response;
+      const result = await api("api/sign-in", {
+        method: "POST",
+        body: {
+          credentialId: toBase64Url(credential.rawId),
+          authenticatorData: toBase64Url(response.authenticatorData),
+          clientDataJson: toBase64Url(response.clientDataJSON),
+          signature: toBase64Url(response.signature)
+        }
+      });
+      await signedIn(result.token);
+    } catch (e) {
+      showMessage(error, e instanceof DOMException ? describeWebAuthnError(e) : e.message, "error");
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  $("sign-out").addEventListener("click", async () => {
+    try { await api("api/sign-out", { method: "POST" }); } catch { }
+    setToken(null);
+  });
+
+  function renderSignedIn() {
+    const signedIn = Boolean(token && wallet);
+    document.querySelectorAll("[data-signed-in]").forEach(el => el.hidden = !signedIn);
+    document.querySelectorAll("[data-signed-out]").forEach(el => el.hidden = signedIn);
+    $("who").hidden = !signedIn;
+    if (signedIn) $("who-name").textContent = wallet.identity.name;
+  }
+
+  async function loadWallet() {
+    if (!token) return renderSignedIn();
+    try {
+      wallet = await api("api/me");
+    } catch {
+      wallet = null;
+    }
+    renderSignedIn();
+    if (wallet) {
+      renderNickname();
+      renderWallet();
+    }
+  }
+
+  // Leaderboard
+
+  async function loadLeaderboard() {
+    try {
+      leaderboard = await api("api/leaderboard");
+    } catch {
+      return;
+    }
+    const rows = $("leaderboard-rows");
+    rows.replaceChildren(...leaderboard.map(entry => {
+      const tr = document.createElement("tr");
+      const online = document.createElement("td");
+      const dot = document.createElement("span");
+      dot.className = entry.online ? "dot on" : "dot";
+      dot.title = entry.online ? "Online" : `Last seen ${formatWhen(entry.lastSeen)}`;
+      online.append(dot);
+      const key = document.createElement("td");
+      const code = document.createElement("code");
+      code.textContent = entry.identity.keyId.slice(0, 12);
+      code.title = entry.identity.keyId;
+      key.append(code);
+      tr.append(cell(entry.rank, "rank"), nameCell(entry.identity), key, cell(entry.identity.responses.toLocaleString(), "num"), online);
+      return tr;
+    }));
+    $("leaderboard-empty").hidden = leaderboard.length > 0;
+    if (wallet) renderRecipients();
+  }
+
+  // Nickname
+
+  function renderNickname() {
+    $("nickname-key").textContent = wallet.identity.keyId;
+    if (document.activeElement !== $("nickname-input")) $("nickname-input").value = wallet.identity.nickname ?? "";
+  }
+
+  async function saveNickname(nickname) {
+    const status = $("nickname-status");
+    try {
+      const identity = await api("api/me/nickname", { method: "PUT", body: { nickname } });
+      wallet.identity = identity;
+      $("nickname-input").value = identity.nickname ?? "";
+      renderSignedIn();
+      showMessage(status, identity.nickname ? `You are now ${identity.nickname}.` : "Nickname cleared.", "success");
+      loadLeaderboard();
+    } catch (e) {
+      showMessage(status, e.message, "error");
+    }
+  }
+
+  $("nickname-form").addEventListener("submit", event => {
+    event.preventDefault();
+    saveNickname($("nickname-input").value);
+  });
+
+  $("nickname-clear").addEventListener("click", () => saveNickname(null));
+
+  // Wallet
+
+  function describeEntry(entry) {
+    switch (entry.kind) {
+      case "Earned": return entry.memo ?? "Earned";
+      case "Sent": return `Sent to ${entry.counterpartyName}${entry.memo ? ` · ${entry.memo}` : ""}`;
+      case "Received": return `From ${entry.counterpartyName}${entry.memo ? ` · ${entry.memo}` : ""}`;
+      default: return entry.memo ?? entry.kind;
+    }
+  }
+
+  function renderWallet() {
+    $("balance").textContent = wallet.balance.toLocaleString();
+    $("history-rows").replaceChildren(...wallet.history.map(entry => {
+      const tr = document.createElement("tr");
+      const amount = cell(`${entry.amount > 0 ? "+" : ""}${entry.amount.toLocaleString()}`, `num ${entry.amount > 0 ? "amount-in" : "amount-out"}`);
+      tr.append(cell(formatWhen(entry.at)), cell(describeEntry(entry)), amount);
+      return tr;
+    }));
+    $("history-empty").hidden = wallet.history.length > 0;
+    renderRecipients();
+  }
+
+  function renderRecipients() {
+    const select = $("transfer-to");
+    const chosen = select.value;
+    const others = leaderboard.map(entry => entry.identity).filter(identity => identity.keyId !== wallet.identity.keyId);
+    select.replaceChildren(...others.map(identity => {
+      const option = document.createElement("option");
+      option.value = identity.keyId;
+      option.textContent = `${identity.name} (${identity.keyId.slice(0, 8)})`;
+      return option;
+    }));
+    if (others.some(identity => identity.keyId === chosen)) select.value = chosen;
+    select.disabled = others.length === 0;
+  }
+
+  $("transfer-form").addEventListener("submit", async event => {
+    event.preventDefault();
+    const status = $("transfer-status");
+    const to = $("transfer-to").value;
+    const amount = Number($("transfer-amount").value);
+    if (!to) return showMessage(status, "There is nobody else to send credits to yet.", "error");
+    try {
+      await api("api/me/transfers", { method: "POST", body: { to, amount, memo: $("transfer-memo").value || null } });
+      const recipient = leaderboard.find(entry => entry.identity.keyId === to)?.identity.name ?? to;
+      showMessage(status, `Sent ${amount.toLocaleString()} to ${recipient}.`, "success");
+      $("transfer-amount").value = "";
+      $("transfer-memo").value = "";
+      await loadWallet();
+    } catch (e) {
+      showMessage(status, e.message, "error");
+    }
+  });
+
+  // Stats
+
+  async function loadStats() {
+    let stats;
+    try {
+      stats = await api("api/stats");
+    } catch {
+      return;
+    }
+    const running = stats.surfaces.filter(surface => surface.running).length;
+    $("stat-surfaces").textContent = stats.surfaces.length;
+    $("stat-surface-list").replaceChildren(...stats.surfaces.map(surface => {
+      const chip = document.createElement("span");
+      chip.className = "chip";
+      const dot = document.createElement("span");
+      dot.className = surface.running ? "dot on" : "dot";
+      chip.append(dot, surface.id);
+      chip.title = surface.running ? "Running" : "Not running";
+      return chip;
+    }));
+    $("stat-surfaces").title = `${running} running`;
+    $("stat-face").textContent = stats.face;
+    $("stat-nodes").textContent = stats.nodesOnline;
+    $("stat-api-clients").textContent = stats.apiClients;
+    const allChannels = stats.discordChannels === null || stats.discordChannels === undefined;
+    $("stat-discord-channels").textContent = allChannels ? "All" : stats.discordChannels;
+    $("stat-discord-detail").textContent = allChannels ? "No include list, so every channel Lane can see" : "";
+
+    $("stat-energy-on").hidden = !stats.energy;
+    $("stat-energy-off").hidden = Boolean(stats.energy);
+    if (stats.energy) {
+      const percent = Math.round(stats.energy.fraction * 100);
+      $("stat-energy").textContent = `${percent}%`;
+      $("stat-energy-meter").dataset.tier = stats.energy.tier;
+      $("stat-energy-meter").firstElementChild.style.width = `${percent}%`;
+      $("stat-energy-detail").textContent = `${stats.energy.tier}${stats.energy.asleep ? " · asleep" : ""}`;
+    }
+  }
+
+  // Sponsor
+
+  const KIND_LABELS = { DiscordChannel: "Discord channel", ApiClient: "API client" };
+  let editingLimit = false;
+
+  function sponsorPath(target) {
+    return `api/me/sponsorships/${encodeURIComponent(target.kind)}/${encodeURIComponent(target.target)}`;
+  }
+
+  function listeningCell(target) {
+    const td = document.createElement("td");
+    const dot = document.createElement("span");
+    dot.className = target.active ? "dot on" : "dot";
+    dot.title = target.active ? "Listening" : "No sponsor can pay right now";
+    td.append(dot);
+    return td;
+  }
+
+  function whatCell(target) {
+    const td = document.createElement("td");
+    td.className = "name";
+    const strong = document.createElement("strong");
+    strong.textContent = target.name ?? target.target;
+    const sub = document.createElement("span");
+    sub.className = "sub";
+    sub.textContent = target.name ? `${KIND_LABELS[target.kind]} · ${target.target}` : KIND_LABELS[target.kind];
+    td.append(strong, sub);
+    return td;
+  }
+
+  function button(text, onClick, className = "small") {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = className;
+    b.textContent = text;
+    b.addEventListener("click", onClick);
+    return b;
+  }
+
+  async function loadSponsorships() {
+    if (!wallet || editingLimit) return;
+    let data;
+    try {
+      data = await api("api/me/sponsorships");
+    } catch {
+      return;
+    }
+    const me = wallet.identity.keyId;
+    $("sponsor-cost").textContent = data.creditsPerRequest;
+    $("sponsor-balance").textContent = data.balance.toLocaleString();
+
+    const mine = data.targets.map(target => [target, target.sponsors.find(s => s.identity.keyId === me)]).filter(([, s]) => s);
+    $("sponsor-mine-rows").replaceChildren(...mine.map(([target, sponsor]) => {
+      const tr = document.createElement("tr");
+      const limitCell = document.createElement("td");
+      const limit = document.createElement("input");
+      limit.type = "number";
+      limit.min = "0";
+      limit.step = "1";
+      limit.placeholder = "No limit";
+      limit.style.width = "7em";
+      limit.value = sponsor.dailyLimit ?? "";
+      limit.addEventListener("focus", () => editingLimit = true);
+      limit.addEventListener("blur", () => editingLimit = false);
+      const save = button("Save", async () => {
+        try {
+          await api(sponsorPath(target), { method: "PUT", body: { dailyLimit: limit.value === "" ? null : Number(limit.value) } });
+          editingLimit = false;
+          loadSponsorships();
+        } catch (e) {
+          alert(e.message);
+        }
+      });
+      const row = document.createElement("div");
+      row.className = "row";
+      row.append(limit, save);
+      limitCell.append(row);
+      const stop = button("Stop", async () => {
+        if (!confirm(`Stop sponsoring ${target.name ?? target.target}?`)) return;
+        try {
+          await api(sponsorPath(target), { method: "DELETE" });
+          loadSponsorships();
+        } catch (e) {
+          alert(e.message);
+        }
+      });
+      const actions = document.createElement("td");
+      actions.append(stop);
+      tr.append(listeningCell(target), whatCell(target), limitCell,
+        cell(sponsor.spentToday.toLocaleString(), "num"), cell(sponsor.spentTotal.toLocaleString(), "num"),
+        cell(target.sponsors.length, "num"), actions);
+      return tr;
+    }));
+    $("sponsor-mine-empty").hidden = mine.length > 0;
+
+    $("sponsor-all-rows").replaceChildren(...data.targets.map(target => {
+      const tr = document.createElement("tr");
+      const names = cell(target.sponsors.map(s => s.identity.name).join(", "));
+      names.style.whiteSpace = "normal";
+      const actions = document.createElement("td");
+      if (!target.sponsors.some(s => s.identity.keyId === me))
+        actions.append(button("Join", () => {
+          $("sponsor-kind").value = target.kind;
+          $("sponsor-target").value = target.target;
+          renderSponsorKind();
+          $("sponsor-limit").focus();
+        }));
+      tr.append(listeningCell(target), whatCell(target), names, actions);
+      return tr;
+    }));
+    $("sponsor-all-empty").hidden = data.targets.length > 0;
+  }
+
+  function renderSponsorKind() {
+    const client = $("sponsor-kind").value === "ApiClient";
+    $("sponsor-target-label").textContent = client ? "Client id" : "Channel id";
+    $("sponsor-name-row").hidden = !client;
+  }
+
+  $("sponsor-kind").addEventListener("change", renderSponsorKind);
+
+  $("sponsor-form").addEventListener("submit", async event => {
+    event.preventDefault();
+    const status = $("sponsor-status");
+    const limit = $("sponsor-limit").value;
+    $("sponsor-key").hidden = true;
+    try {
+      const result = await api("api/me/sponsorships", {
+        method: "POST",
+        body: {
+          kind: $("sponsor-kind").value,
+          target: $("sponsor-target").value,
+          dailyLimit: limit === "" ? null : Number(limit),
+          name: $("sponsor-name").value || null
+        }
+      });
+      showMessage(status, `You are sponsoring ${result.target.name ?? result.target.target}.`, "success");
+      if (result.apiKey) {
+        $("sponsor-key-value").value = result.apiKey;
+        $("sponsor-key").hidden = false;
+      }
+      $("sponsor-target").value = "";
+      $("sponsor-name").value = "";
+      $("sponsor-limit").value = "";
+      loadSponsorships();
+    } catch (e) {
+      showMessage(status, e.message, "error");
+    }
+  });
+
+  $("sponsor-key-copy").addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText($("sponsor-key-value").value);
+      $("sponsor-key-copy").textContent = "Copied";
+    } catch {
+      $("sponsor-key-value").select();
+    }
+  });
+
+  // Forum
+
+  let forumThreadId = null;
+
+  try { $("forum-sort").value = localStorage.getItem(FORUM_SORT_KEY) ?? "bumped"; } catch { }
+  if (!$("forum-sort").value) $("forum-sort").value = "bumped";
+
+  function element(tag, className, text) {
+    const el = document.createElement(tag);
+    el.className = className;
+    el.textContent = text;
+    return el;
+  }
+
+  /** Replaces el's contents with text, turning http(s) URLs into links. */
+  function setLinkedText(el, text) {
+    const nodes = [];
+    let last = 0;
+    for (const match of text.matchAll(/https?:\/\/[^\s<>"]+/g)) {
+      const url = match[0].replace(/[.,;:!?'")\]]+$/, "");
+      if (match.index > last) nodes.push(text.slice(last, match.index));
+      const link = document.createElement("a");
+      link.href = url;
+      link.textContent = url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      nodes.push(link);
+      last = match.index + url.length;
+    }
+    if (last < text.length) nodes.push(text.slice(last));
+    el.replaceChildren(...nodes);
+    return el;
+  }
+
+  function plural(count, word) {
+    return `${count.toLocaleString()} ${word}${count === 1 ? "" : "s"}`;
+  }
+
+  function loadForum(id) {
+    $("forum-list").hidden = Boolean(id);
+    $("forum-thread").hidden = !id;
+    if (!id) return loadForumPosts();
+    if (id !== forumThreadId) {
+      forumThreadId = id;
+      ["forum-thread-title", "forum-thread-meta", "forum-thread-description"].forEach(el => $(el).textContent = "");
+      $("forum-comments").replaceChildren();
+      $("forum-comments-empty").hidden = true;
+      showMessage($("forum-comment-status"), null, "");
+    }
+    return loadForumThread(id);
+  }
+
+  async function loadForumPosts() {
+    let posts;
+    try {
+      posts = await api(`api/forum/posts?sort=${$("forum-sort").value}`);
+    } catch {
+      return;
+    }
+    $("forum-posts").replaceChildren(...posts.map(post => {
+      const item = element("a", "forum-item");
+      item.href = `#forum/${post.id}`;
+      const meta = [post.author.name, plural(post.comments, "comment"), `posted ${formatWhen(post.createdAt)}`];
+      if (post.comments > 0) meta.push(`bumped ${formatWhen(post.bumpedAt)}`);
+      item.append(
+        element("div", "forum-title", post.title),
+        element("div", "forum-excerpt", post.description),
+        element("div", "forum-meta", meta.join(" · ")));
+      return item;
+    }));
+    $("forum-empty").hidden = posts.length > 0;
+  }
+
+  async function loadForumThread(id) {
+    let thread;
+    try {
+      thread = await api(`api/forum/posts/${encodeURIComponent(id)}`);
+    } catch (e) {
+      if (id === forumThreadId) showMessage($("forum-thread-error"), e.message, "error");
+      return;
+    }
+    if (id !== forumThreadId) return;
+    showMessage($("forum-thread-error"), null, "");
+    const { post, comments } = thread;
+    $("forum-thread-title").textContent = post.title;
+    $("forum-thread-meta").textContent = `${post.author.name} · ${formatWhen(post.createdAt)}`;
+    setLinkedText($("forum-thread-description"), post.description);
+    $("forum-comments-heading").textContent = plural(comments.length, "comment");
+    $("forum-comments").replaceChildren(...comments.map(comment => {
+      const item = element("div", "comment");
+      item.append(
+        element("div", "forum-meta", `${comment.author.name} · ${formatWhen(comment.createdAt)}`),
+        setLinkedText(element("div", "forum-text"), comment.body));
+      return item;
+    }));
+    $("forum-comments-empty").hidden = comments.length > 0;
+  }
+
+  $("forum-sort").addEventListener("change", () => {
+    try { localStorage.setItem(FORUM_SORT_KEY, $("forum-sort").value); } catch { }
+    loadForumPosts();
+  });
+
+  $("forum-post-form").addEventListener("submit", async event => {
+    event.preventDefault();
+    const status = $("forum-post-status");
+    try {
+      const post = await api("api/me/forum/posts", {
+        method: "POST",
+        body: { title: $("forum-title").value, description: $("forum-description").value }
+      });
+      $("forum-title").value = "";
+      $("forum-description").value = "";
+      showMessage(status, null, "");
+      location.hash = `#forum/${post.id}`;
+    } catch (e) {
+      showMessage(status, e.message, "error");
+    }
+  });
+
+  $("forum-comment-form").addEventListener("submit", async event => {
+    event.preventDefault();
+    const status = $("forum-comment-status");
+    const id = forumThreadId;
+    try {
+      await api(`api/me/forum/posts/${encodeURIComponent(id)}/comments`, { method: "POST", body: { body: $("forum-comment-body").value } });
+      $("forum-comment-body").value = "";
+      showMessage(status, null, "");
+      await loadForumThread(id);
+    } catch (e) {
+      showMessage(status, e.message, "error");
+    }
+  });
+
+  // Routing
+
+  const loaders = {
+    leaderboard: [loadLeaderboard, 5000],
+    nickname: [loadWallet, 0],
+    wallet: [async () => { await loadLeaderboard(); await loadWallet(); }, 10000],
+    stats: [loadStats, 2000],
+    sponsor: [async () => { if (!wallet) await loadWallet(); await loadSponsorships(); }, 10000],
+    forum: [loadForum, 10000]
+  };
+
+  // Hashes are #page or #page/argument, e.g. #forum/12.
+  function route() {
+    const [name, argument] = location.hash.slice(1).split("/");
+    const page = PAGES.includes(name) ? name : "leaderboard";
+    document.querySelectorAll("[data-page]").forEach(section => section.hidden = section.dataset.page !== page);
+    document.querySelectorAll("#nav a").forEach(link => link.toggleAttribute("aria-current", link.getAttribute("href") === `#${page}`));
+    document.querySelectorAll("#nav a[aria-current]").forEach(link => link.setAttribute("aria-current", "page"));
+
+    clearInterval(timer);
+    const [load, interval] = loaders[page];
+    if (load) {
+      const run = () => load(argument);
+      run();
+      if (interval) timer = setInterval(run, interval);
+    }
+  }
+
+  window.addEventListener("hashchange", route);
+  renderSignedIn();
+  loadWallet();
+  route();
+</script>
+</body>
+</html>

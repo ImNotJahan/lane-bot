@@ -33,6 +33,8 @@ public static class MessageEndpoints
         if (body is null || string.IsNullOrWhiteSpace(body.Text))
             return Results.BadRequest(new ErrorResponse("empty_message", "A message needs some text."));
 
+        if (!await ApiAuth.ChargeAsync(context, client, ct).ConfigureAwait(false)) return ApiAuth.OutOfCredits(client);
+
         Participant author = ResolveAuthor(client, map.Surface, body.Author);
 
         ApiSessionEntry entry = map.Ensure(client, key, SessionKind.Api, author);

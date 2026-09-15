@@ -42,6 +42,9 @@ public sealed record ModelResponse(
     public string Text => string.Concat(Content.OfType<TextPart>().Select(p => p.Text));
 
     public IReadOnlyList<ToolUsePart> ToolCalls => [.. Content.OfType<ToolUsePart>()];
+
+    /// <summary>Set only on responses produced by a node.</summary>
+    public NodeAttestation? Origin { get; init; }
 }
 
 public abstract record ModelStreamEvent

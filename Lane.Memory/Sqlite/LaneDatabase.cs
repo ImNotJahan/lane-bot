@@ -109,6 +109,83 @@ public sealed class LaneDatabase
                 value_json TEXT NOT NULL,
                 PRIMARY KEY (scope_key, key)
             );
+
+            CREATE TABLE IF NOT EXISTS node_identities (
+                key_id     TEXT    PRIMARY KEY,
+                algorithm  TEXT    NOT NULL,
+                public_key TEXT    NOT NULL,
+                nickname   TEXT    COLLATE NOCASE UNIQUE,
+                node_name  TEXT,
+                responses  INTEGER NOT NULL DEFAULT 0,
+                first_seen INTEGER NOT NULL,
+                last_seen  INTEGER NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS node_credentials (
+                credential_id TEXT NOT NULL,
+                key_id        TEXT NOT NULL REFERENCES node_identities(key_id),
+                PRIMARY KEY (credential_id, key_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS credit_accounts (
+                account TEXT    PRIMARY KEY,
+                balance INTEGER NOT NULL CHECK (balance >= 0)
+            );
+
+            CREATE TABLE IF NOT EXISTS credit_entries (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                account      TEXT    NOT NULL,
+                amount       INTEGER NOT NULL,
+                kind         TEXT    NOT NULL,
+                counterparty TEXT,
+                memo         TEXT,
+                at           INTEGER NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS ix_credit_entries_account ON credit_entries(account, id);
+
+            CREATE TABLE IF NOT EXISTS sponsorships (
+                kind         TEXT    NOT NULL,
+                target       TEXT    NOT NULL,
+                account      TEXT    NOT NULL,
+                daily_limit  INTEGER,
+                spent_day    TEXT,
+                spent_on_day INTEGER NOT NULL DEFAULT 0,
+                spent_total  INTEGER NOT NULL DEFAULT 0,
+                charge_order INTEGER NOT NULL DEFAULT 0,
+                since        INTEGER NOT NULL,
+                PRIMARY KEY (kind, target, account)
+            );
+
+            CREATE TABLE IF NOT EXISTS sponsored_api_clients (
+                id         TEXT    PRIMARY KEY COLLATE NOCASE,
+                name       TEXT    NOT NULL,
+                key_hash   TEXT    NOT NULL UNIQUE,
+                created_by TEXT    NOT NULL,
+                created_at INTEGER NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS forum_posts (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                author      TEXT    NOT NULL,
+                title       TEXT    NOT NULL,
+                description TEXT    NOT NULL,
+                created_at  INTEGER NOT NULL,
+                bumped_at   INTEGER NOT NULL,
+                bump_order  INTEGER NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS ix_forum_posts_bump ON forum_posts(bump_order);
+
+            CREATE TABLE IF NOT EXISTS forum_comments (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                post_id    INTEGER NOT NULL REFERENCES forum_posts(id),
+                author     TEXT    NOT NULL,
+                body       TEXT    NOT NULL,
+                created_at INTEGER NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS ix_forum_comments_post ON forum_comments(post_id, id);
             """;
 
         command.ExecuteNonQuery();

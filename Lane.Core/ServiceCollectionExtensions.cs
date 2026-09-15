@@ -41,6 +41,7 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<IIdentityDirectory>(NullIdentityDirectory.Instance);
         services.TryAddSingleton<IVoiceprintDirectory>(NullVoiceprintDirectory.Instance);
         services.TryAddSingleton<ISessionDescriptions>(NullSessionDescriptions.Instance);
+        services.TryAddSingleton<ISessionThresholds>(NullSessionThresholds.Instance);
         services.TryAddSingleton<IPresenceSink, EventBusPresenceSink>();
         services.TryAddSingleton<ITranscriptFormatter, TranscriptFormatter>();
 

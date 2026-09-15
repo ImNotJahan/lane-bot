@@ -1,4 +1,7 @@
 using Lane.Core.Context;
+using Lane.Core.Credits;
+using Lane.Core.Forum;
+using Lane.Core.Nodes;
 using Lane.Core.Memory;
 using Lane.Memory.Handlers;
 using Lane.Memory.Sqlite;
@@ -31,6 +34,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IStateStore, SqliteStateStore>();
         services.AddSingleton<ITranscriptStore, SqliteTranscriptStore>();
         services.AddSingleton<IKeyValueStore, SqliteKeyValueStore>();
+        services.AddSingleton<INodeDirectory, SqliteNodeDirectory>();
+        services.AddSingleton<ICreditLedger, SqliteCreditLedger>();
+        services.AddSingleton<ISponsorships>(sp => new SqliteSponsorships(sp.GetRequiredService<LaneDatabase>()));
+        services.AddSingleton<IForum>(sp => new SqliteForum(sp.GetRequiredService<LaneDatabase>()));
 
         services.AddSingleton<IMemoryHandlerFactory, SlidingWindowFactory>();
         services.AddSingleton<IMemoryHandlerFactory, SummaryFactory>();

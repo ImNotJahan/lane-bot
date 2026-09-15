@@ -18,8 +18,11 @@ public sealed class ResponsePolicyOptions
     /// </summary>
     public bool Enabled { get; set; } = true;
 
-    /// <summary>At or below this, Lane stays quiet. The message is still remembered.</summary>
-    public float Threshold { get; set; } = 0.2f;
+    /// <summary>
+    /// At or below this, Lane stays quiet. The message is still remembered. Used wherever
+    /// <see cref="ISessionThresholds"/> has no override for the conversation.
+    /// </summary>
+    public float DefaultThreshold { get; set; } = 0.2f;
 
     /// <summary>Template name for the classifier's instructions.</summary>
     public string Prompt { get; set; } = "Routing";
@@ -57,6 +60,7 @@ public sealed class ResponsePolicyStage(
     IPromptLibrary prompts,
     ITranscriptFormatter formatter,
     ISessionDescriptions descriptions,
+    ISessionThresholds thresholds,
     IOptions<ResponsePolicyOptions> options,
     IOptions<Lane.Core.Agent.AgentOptions> agent,
     ILogger<ResponsePolicyStage> log,
@@ -142,15 +146,17 @@ public sealed class ResponsePolicyStage(
             // Kept for the persona, so the reply is not merely allowed but pitched.
             ctx.Items["enthusiasm"] = verdict.Enthusiasm;
 
-            if (verdict.Enthusiasm > _options.Threshold)
+            float threshold = thresholds.For(ctx.Descriptor) ?? _options.DefaultThreshold;
+
+            if (verdict.Enthusiasm > threshold)
             {
-                log.LogInformation("Replying in {Session} (enthusiasm {Score:0.00})",
-                    ctx.Session.Id, verdict.Enthusiasm);
+                log.LogInformation("Replying in {Session} (enthusiasm {Score:0.00}, threshold {Threshold:0.00})",
+                    ctx.Session.Id, verdict.Enthusiasm, threshold);
                 return;
             }
 
-            log.LogInformation("Staying quiet in {Session} (enthusiasm {Score:0.00})",
-                ctx.Session.Id, verdict.Enthusiasm);
+            log.LogInformation("Staying quiet in {Session} (enthusiasm {Score:0.00}, threshold {Threshold:0.00})",
+                ctx.Session.Id, verdict.Enthusiasm, threshold);
 
             // Suppressed, not dropped: the later stages still write it to memory, so a
             // conversation Lane sat out is one she can still refer back to.

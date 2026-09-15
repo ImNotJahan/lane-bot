@@ -10,6 +10,12 @@
     <Project Path="Lane.Surfaces.Terminal/Lane.Surfaces.Terminal.csproj" />
     <Project Path="Lane.Surfaces.Api/Lane.Surfaces.Api.csproj" />
     <Project Path="Lane.Host/Lane.Host.csproj" />
+    <Project Path="Lane.Nodes.Protocol/Lane.Nodes.Protocol.csproj" />
+    <Project Path="Lane.Nodes/Lane.Nodes.csproj" />
+    <Project Path="Lane.Node.Sdk/Lane.Node.Sdk.csproj" />
+  </Folder>
+  <Folder Name="/examples/">
+    <Project Path="Examples/Lane.Node.OpenAi/Lane.Node.OpenAi.csproj" />
   </Folder>
   <Folder Name="/test/">
     <Project Path="Lane.Testing/Lane.Testing.csproj" />

@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using Lane.Audio;
+using Lane.Core.Credits;
 using Lane.Core.Events;
 using Lane.Core.Identity;
 using Lane.Core.Kernel;
@@ -43,6 +44,7 @@ public sealed class ApiSurface : ISurface
     private readonly IEventBus           _bus;
     private readonly TurnStreamHub       _hub;
     private readonly AudioRouter?        _router;
+    private readonly ISponsoredAccess?   _sponsored;
     private readonly ILoggerFactory      _loggers;
     private readonly ILogger<ApiSurface> _log;
 
@@ -58,9 +60,11 @@ public sealed class ApiSurface : ISurface
         IEventBus bus,
         TurnStreamHub hub,
         ILoggerFactory loggers,
-        AudioRouter? router = null)
+        AudioRouter? router = null,
+        ISponsoredAccess? sponsored = null)
     {
         Id          = id;
+        _sponsored  = sponsored;
         _options    = options;
         _kernel     = kernel;
         _sessions   = sessions;
@@ -90,6 +94,9 @@ public sealed class ApiSurface : ISurface
     internal ApiSessionMap Sessions => _map;
 
     internal ApiClientRegistry Clients => _clients;
+
+    /// <summary>Configured clients, not counting anonymous access.</summary>
+    public int ClientCount => _clients.Count;
 
     /// <summary>
     /// Where it actually ended up listening. Not the same as the configured URL when the
@@ -132,6 +139,8 @@ public sealed class ApiSurface : ISurface
         builder.Services.AddSingleton(_hub);
 
         if (_router is not null) builder.Services.AddSingleton(_router);
+
+        if (_sponsored is not null) builder.Services.AddSingleton(_sponsored);
 
         if (_options.AllowedOrigins.Count > 0)
         {

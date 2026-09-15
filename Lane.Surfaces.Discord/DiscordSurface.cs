@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Lane.Audio;
+using Lane.Core.Credits;
 using Lane.Core.Energy;
 using Lane.Core.Events;
 using Lane.Core.Identity;
@@ -37,6 +38,7 @@ public sealed class DiscordSurface : ISurface
     private readonly IIdentityResolver      _identity;
     private readonly IEventBus              _bus;
     private readonly AudioRouter?           _router;
+    private readonly ISponsoredAccess?      _sponsored;
     private readonly ILogger<DiscordSurface> _log;
 
     /// <summary>Channels Lane has already attached to, so a second message does not attach twice.</summary>
@@ -64,9 +66,11 @@ public sealed class DiscordSurface : ISurface
         IIdentityResolver identity,
         IEventBus bus,
         ILogger<DiscordSurface> log,
-        AudioRouter? router = null)
+        AudioRouter? router = null,
+        ISponsoredAccess? sponsored = null)
     {
-        _router   = router;
+        _router    = router;
+        _sponsored = sponsored;
         ArgumentException.ThrowIfNullOrWhiteSpace(token);
 
         Id        = id;
@@ -94,6 +98,11 @@ public sealed class DiscordSurface : ISurface
     }
 
     public SurfaceId Id { get; }
+
+    /// <summary>Channels in the include list that are not also excluded. Null when there is no include list, so every channel is.</summary>
+    public int? IncludedChannelCount => _options.Channels.Include.Count == 0
+        ? null
+        : _options.Channels.Include.Distinct().Count(channel => !_options.Channels.Exclude.Contains(channel));
 
     public async Task StartAsync(CancellationToken ct)
     {
@@ -242,7 +251,8 @@ public sealed class DiscordSurface : ISurface
             bool isDirect = message.GuildId is null;
 
             if (isDirect && !_options.AllowDirectMessages) return;
-            if (!isDirect && !_options.Channels.Allows(message.ChannelId)) return;
+            if (!isDirect && !_options.Channels.Allows(message.ChannelId) && !await SponsoredAsync(message.ChannelId).ConfigureAwait(false))
+                return;
 
             Participant author = ToParticipant(message.Author);
 
@@ -283,6 +293,15 @@ public sealed class DiscordSurface : ISurface
             _log.LogError(ex, "Failed to ingest a Discord message in {Channel}", message.ChannelId);
         }
     }
+
+    /// <summary>Charges the channel's sponsors for one message. Excluded channels are never sponsored.</summary>
+    private async ValueTask<bool> SponsoredAsync(ulong channelId) =>
+        _sponsored is not null &&
+        !_options.Channels.Exclude.Contains(channelId) &&
+        await _sponsored.TryChargeAsync(
+            SponsoredKind.DiscordChannel,
+            channelId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            _lifetime?.Token ?? CancellationToken.None).ConfigureAwait(false);
 
     private IReadOnlyList<ContentPart> BuildContent(Message message, SessionId session, Participant author)
     {

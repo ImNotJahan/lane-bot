@@ -91,6 +91,9 @@ public static class VoiceEndpoints
                 "unsupported_format",
                 $"Cannot accept {incoming}. Send {ApiAudioSource.SupportedFormats}."));
 
+        if (!await ApiAuth.ChargeAsync(context, client, context.RequestAborted).ConfigureAwait(false))
+            return ApiAuth.OutOfCredits(client);
+
         AudioFormat outgoing = new(
             outRate ?? options.VoiceOptions.OutputSampleRate,
             outChannels ?? options.VoiceOptions.OutputChannels,

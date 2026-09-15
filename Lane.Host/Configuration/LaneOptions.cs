@@ -56,6 +56,9 @@ public sealed class ModelInstanceOptions
     /// <summary>Overrides the provider's default base URL. Required for "openai-compatible".</summary>
     public string Endpoint { get; set; } = "";
 
+    /// <summary>For the "node" provider: which pool of connected nodes answers this instance.</summary>
+    public string Pool { get; set; } = "";
+
     /// <summary>
     /// What this model can do, e.g. <c>["Tools","Streaming"]</c>. Declared per instance
     /// because an endpoint like OpenRouter fronts models with wildly different support.

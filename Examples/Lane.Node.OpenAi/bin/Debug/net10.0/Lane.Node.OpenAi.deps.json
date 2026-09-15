@@ -1,0 +1,123 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "Lane.Node.OpenAi/1.0.0": {
+        "dependencies": {
+          "Lane.Node.Sdk": "1.0.0",
+          "Lane.Providers": "1.0.0"
+        },
+        "runtime": {
+          "Lane.Node.OpenAi.dll": {}
+        }
+      },
+      "Anthropic/12.11.0": {
+        "dependencies": {
+          "Microsoft.Extensions.AI.Abstractions": "10.4.0"
+        },
+        "runtime": {
+          "lib/net9.0/Anthropic.dll": {
+            "assemblyVersion": "12.11.0.0",
+            "fileVersion": "12.11.0.0"
+          }
+        }
+      },
+      "Microsoft.Extensions.AI.Abstractions/10.4.0": {
+        "runtime": {
+          "lib/net10.0/Microsoft.Extensions.AI.Abstractions.dll": {
+            "assemblyVersion": "10.4.0.0",
+            "fileVersion": "10.400.26.16002"
+          }
+        }
+      },
+      "Lane.Core/1.0.0": {
+        "runtime": {
+          "Lane.Core.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "Lane.Node.Sdk/1.0.0": {
+        "dependencies": {
+          "Lane.Core": "1.0.0",
+          "Lane.Nodes.Protocol": "1.0.0"
+        },
+        "runtime": {
+          "Lane.Node.Sdk.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "Lane.Nodes.Protocol/1.0.0": {
+        "dependencies": {
+          "Lane.Core": "1.0.0"
+        },
+        "runtime": {
+          "Lane.Nodes.Protocol.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "Lane.Providers/1.0.0": {
+        "dependencies": {
+          "Anthropic": "12.11.0",
+          "Lane.Core": "1.0.0"
+        },
+        "runtime": {
+          "Lane.Providers.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "Lane.Node.OpenAi/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "Anthropic/12.11.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-cwWxqnxZrFIyh9q/7gq37KvaUcdll4gBpmfLFI+G1nS2/4JbRGP7OgC9zMal9y/ALmwwNAycAHsDvE8c1xHLNg==",
+      "path": "anthropic/12.11.0",
+      "hashPath": "anthropic.12.11.0.nupkg.sha512"
+    },
+    "Microsoft.Extensions.AI.Abstractions/10.4.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-t3S2H4do4YeNheIfE3GEl3MnKIrnxpbLu7a88spfApYR3in9ddhIq/GMtxgMaFjn/PUMTCFv5YH7Y6Q91dsDXQ==",
+      "path": "microsoft.extensions.ai.abstractions/10.4.0",
+      "hashPath": "microsoft.extensions.ai.abstractions.10.4.0.nupkg.sha512"
+    },
+    "Lane.Core/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "Lane.Node.Sdk/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "Lane.Nodes.Protocol/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "Lane.Providers/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

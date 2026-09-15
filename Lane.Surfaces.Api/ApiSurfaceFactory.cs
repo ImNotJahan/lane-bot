@@ -1,5 +1,6 @@
 using Lane.Audio;
 using Lane.Core.Agent;
+using Lane.Core.Credits;
 using Lane.Core.Events;
 using Lane.Core.Identity;
 using Lane.Core.Kernel;
@@ -48,7 +49,8 @@ public sealed class ApiSurfaceFactory(IApiKeySource keys) : ISurfaceFactory
             services.GetRequiredService<IEventBus>(),
             services.GetRequiredService<TurnStreamHub>(),
             services.GetRequiredService<ILoggerFactory>(),
-            services.GetService<AudioRouter>());
+            services.GetService<AudioRouter>(),
+            services.GetService<ISponsoredAccess>());
     }
 }
 

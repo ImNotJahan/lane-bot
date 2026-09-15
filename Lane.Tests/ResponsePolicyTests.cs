@@ -117,7 +117,7 @@ public sealed class ResponsePolicyTests
     [Fact]
     public async Task The_threshold_is_where_it_is_configured()
     {
-        await using LaneHarness harness = Harness(Scoring(0.5f), o => o.Threshold = 0.7f);
+        await using LaneHarness harness = Harness(Scoring(0.5f), o => o.DefaultThreshold = 0.7f);
 
         RecordingChannel channel = harness.OpenSession("discord.main", "general");
 
@@ -126,6 +126,41 @@ public sealed class ResponsePolicyTests
         await channel.QuietAsync();
 
         Assert.Empty(channel.Sent);
+    }
+
+    [Fact]
+    public async Task A_conversation_threshold_overrides_the_default()
+    {
+        FixedThresholds thresholds = new(0.1f);
+
+        await using LaneHarness harness = LaneHarness.Create(Scoring(0.5f, reply: "fine"), configure: services =>
+        {
+            services.Configure<ResponsePolicyOptions>(o =>
+            {
+                o.Enabled              = true;
+                o.SkipInDirectSessions = false;
+                o.DefaultThreshold     = 0.7f;
+            });
+
+            services.AddSingleton<ISessionThresholds>(thresholds);
+        });
+
+        RecordingChannel channel = harness.OpenSession("discord.main", "general");
+
+        await harness.SendAsync(channel, "someone", "middling");
+
+        await channel.WaitForAsync(1);
+
+        Assert.Equal("fine", Assert.Single(channel.Sent).Text);
+    }
+
+    private sealed class FixedThresholds(float threshold) : ISessionThresholds
+    {
+        public float? For(SessionDescriptor? session) => threshold;
+
+        public bool Durable => true;
+
+        public ValueTask SetAsync(string memoryGroup, float? value, CancellationToken ct) => ValueTask.CompletedTask;
     }
 
     [Fact]

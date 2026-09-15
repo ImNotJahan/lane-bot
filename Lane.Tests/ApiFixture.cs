@@ -44,7 +44,8 @@ public sealed class ApiFixture : IAsyncDisposable
         Action<ApiSurfaceOptions>? configure = null,
         Action<IServiceCollection>? services = null,
         string surfaceId = "api",
-        bool audio = false)
+        bool audio = false,
+        Lane.Core.Credits.ISponsoredAccess? sponsored = null)
     {
         LaneHarness harness = LaneHarness.Create(
             model ?? ScriptedLanguageModel.Echoing("ok"),
@@ -81,7 +82,8 @@ public sealed class ApiFixture : IAsyncDisposable
             harness.Services.GetRequiredService<Lane.Core.Events.IEventBus>(),
             harness.Services.GetRequiredService<Lane.Surfaces.Api.Streaming.TurnStreamHub>(),
             harness.Services.GetRequiredService<ILoggerFactory>(),
-            audio ? harness.Services.GetRequiredService<Lane.Audio.AudioRouter>() : null);
+            audio ? harness.Services.GetRequiredService<Lane.Audio.AudioRouter>() : null,
+            sponsored);
 
         await surface.StartAsync(CancellationToken.None);
 
