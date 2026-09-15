@@ -11,12 +11,9 @@ capture is a native module, so voice needs a development build. See **Running** 
 
 ## 1. Let the app in
 
-Two changes on the Lane side, both configuration. Put them in
-`Lane.Host/appsettings.local.json` so the committed defaults stay loopback-only.
-
-**Bind somewhere the phone can reach.** The API surface listens on `127.0.0.1` by default —
-deliberately, since it speaks for Lane. Add the tailnet address alongside it, keeping
-loopback so `curl` and the existing companion client are unaffected:
+**Bind somewhere the phone can reach.** The committed `appsettings.json` already binds the
+API on every interface (`http://0.0.0.0:5080`). To restrict it, override `Urls` in
+`Lane.Host/appsettings.local.json`, e.g. to loopback plus a tailnet address:
 
 ```jsonc
 "Urls": "http://127.0.0.1:5080;http://100.x.y.z:5080"

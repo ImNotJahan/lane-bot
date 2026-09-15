@@ -81,9 +81,9 @@ Paths resolve against the binary's directory, so `lane.db`, `Prompts/`, `Books/`
 directory, so run Lane from the target directory (both service definitions set
 `WorkingDirectory`).
 
-`appsettings.json` opens port 5050 for the face and binds the API to `127.0.0.1:5080`. If
-the companion talks to Lane over the network, that address and the firewall are the two
-things to revisit on a new host.
+`appsettings.json` binds the face (5050) and the API (5080) on every interface. To reach
+them from another network, open both ports in the host firewall and forward them on the
+router, or put the host on a tailnet. The API requires a client key; the face does not.
 
 ## Optional tools
 

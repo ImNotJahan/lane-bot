@@ -3,8 +3,8 @@
 The API surface lets your own app talk to Lane. It covers per-app keys, conversations you name yourself, replies
 streamed as they're written, a live feed of what Lane is doing, and a voice socket.
 
-By default it listens on `http://127.0.0.1:5080`, loopback only. The operator decides whether it's reachable from
-anywhere else. All request and response bodies are JSON with camelCase property names, and properties that would be
+Without a `Urls` setting it listens on `http://127.0.0.1:5080`, loopback only. The shipped `appsettings.json` binds
+`http://0.0.0.0:5080` so it is reachable from other networks; every request still needs a client key. All request and response bodies are JSON with camelCase property names, and properties that would be
 `null` are left out.
 
 ```bash

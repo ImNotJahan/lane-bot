@@ -361,7 +361,7 @@ Lane's data is back in $SOURCE
 
   build and run   cd "$SOURCE" && dotnet run --project Lane.Host
   database        $TARGET/lane.db
-  ports           5050 (face), 127.0.0.1:5080 (api) — from appsettings.json
+  ports           0.0.0.0:5050 (face), 0.0.0.0:5080 (api) — from appsettings.json
 
 Run from the repository root: .env is found by walking up from the working directory.
 DONE
@@ -372,7 +372,7 @@ Lane is installed in $TARGET
 
   run it        cd "$TARGET" && ./lane
   headless      cd "$TARGET" && ./lane --no-tui
-  ports         5050 (face), 127.0.0.1:5080 (api) — from appsettings.json
+  ports         0.0.0.0:5050 (face), 0.0.0.0:5080 (api) — from appsettings.json
 
 The terminal surface takes over the terminal; --no-tui keeps it as plain logs.
 DONE

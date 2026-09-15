@@ -13,6 +13,9 @@ public sealed class FaceOptions
 {
     public bool Enabled { get; set; }
 
+    /// <summary><c>HttpListener</c> host: <c>localhost</c> for loopback only, <c>+</c> for every interface.</summary>
+    public string Host { get; set; } = "localhost";
+
     public int Port { get; set; } = 5050;
 
     public string DefaultEmoticon { get; set; } = "( ._.)";
@@ -41,7 +44,7 @@ public sealed class FaceServer(
         if (!_options.Enabled) return;
 
         using HttpListener listener = new();
-        listener.Prefixes.Add($"http://localhost:{_options.Port}/");
+        listener.Prefixes.Add($"http://{_options.Host}:{_options.Port}/");
 
         try
         {
@@ -54,7 +57,7 @@ public sealed class FaceServer(
             return;
         }
 
-        log.LogInformation("Face at http://localhost:{Port}/", _options.Port);
+        log.LogInformation("Face at http://{Host}:{Port}/", _options.Host, _options.Port);
 
         using IDisposable subscription = bus.Subscribe<PresenceChanged>(change =>
         {
