@@ -81,6 +81,7 @@ public static class DashboardPage
             <div id="log"></div>
           </section>
         </main>
+        <script src="/auth.js"></script>
         <script>
           const el = id => document.getElementById(id);
 
@@ -135,7 +136,7 @@ public static class DashboardPage
 
           async function poll() {
             try {
-              const res = await fetch("/api/snapshot");
+              const res = await laneFetch("/api/snapshot");
               render(await res.json());
               el("liveDot").classList.add("live");
             } catch (e) {

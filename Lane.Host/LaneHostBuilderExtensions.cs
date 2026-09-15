@@ -105,7 +105,8 @@ public static class LaneHostBuilderExtensions
             sp.GetRequiredService<IEnergyService>(),
             sp.GetRequiredService<IOptions<DashboardOptions>>(),
             sp.GetRequiredService<IHostApplicationLifetime>(),
-            sp.GetRequiredService<ILogger<WebDashboardServer>>()));
+            sp.GetRequiredService<ILogger<WebDashboardServer>>(),
+            sp.GetService<NodePortal>()));
     }
 
     /// <summary>

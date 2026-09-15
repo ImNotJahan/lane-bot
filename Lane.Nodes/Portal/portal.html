@@ -472,13 +472,14 @@
   const requestedRelay = new URLSearchParams(location.search).get("relay");
   let signInPopup = null;
 
-  /** The opener's origin, if it is the Lane this node app connects to. */
+  /** The opener's origin, if it is on the host of the Lane this node app connects to (any port, so her dashboard too). */
   const relayOrigin = localNode.then(state => {
     if (!requestedRelay || !window.opener || !state?.settings?.laneUrl) return null;
     try {
       const lane = new URL(state.settings.laneUrl);
+      const relay = new URL(requestedRelay);
       const scheme = { "ws:": "http:", "wss:": "https:" }[lane.protocol] ?? lane.protocol;
-      return `${scheme}//${lane.host}` === requestedRelay ? requestedRelay : null;
+      return relay.protocol === scheme && relay.hostname === lane.hostname && relay.origin === requestedRelay ? requestedRelay : null;
     } catch {
       return null;
     }

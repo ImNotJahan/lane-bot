@@ -50,6 +50,7 @@ public static class ConfigPage
         </header>
         <textarea id="editor" spellcheck="false" placeholder="loading…"></textarea>
         <div id="status"></div>
+        <script src="/auth.js"></script>
         <script>
           const el = id => document.getElementById(id);
           const editor = el("editor");
@@ -62,7 +63,7 @@ public static class ConfigPage
 
           async function load() {
             try {
-              const res = await fetch("/api/config");
+              const res = await laneFetch("/api/config");
               const data = await res.json();
               if (!res.ok) throw new Error(data.error || res.statusText);
               editor.value = data.content;
@@ -84,7 +85,7 @@ public static class ConfigPage
 
             el("saveBtn").disabled = true;
             try {
-              const res = await fetch("/api/config", {
+              const res = await laneFetch("/api/config", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(parsed, null, 2)
@@ -108,7 +109,7 @@ public static class ConfigPage
             setStatus("Restarting…", "ok");
 
             try {
-              await fetch("/api/restart", { method: "POST" });
+              await laneFetch("/api/restart", { method: "POST" });
             } catch (e) {
               // The process is exiting to relaunch; a dropped connection is expected here.
             }

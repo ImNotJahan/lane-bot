@@ -148,6 +148,7 @@ public sealed class NodePortalTests : IAsyncLifetime
     private readonly SqliteCreditLedger  _ledger;
     private readonly SqliteSponsorships  _sponsorships;
     private readonly NodeBookkeeper      _bookkeeper;
+    private readonly NodePortal          _portal;
     private readonly NodeListener        _listener;
 
     private HttpClient _http = null!;
@@ -160,8 +161,28 @@ public sealed class NodePortalTests : IAsyncLifetime
         _ledger       = new SqliteCreditLedger(database);
         _sponsorships = new SqliteSponsorships(database);
         _bookkeeper   = new NodeBookkeeper(_directory, _ledger, _options);
-        _listener     = new NodeListener(_pool, _options, NullLoggerFactory.Instance, _bookkeeper,
-            new NodePortal(_pool, _directory, _ledger, _sponsorships, new SqliteForum(database), _status, _options));
+        _portal       = new NodePortal(_pool, _directory, _ledger, _sponsorships, new SqliteForum(database), _status, _options);
+        _listener     = new NodeListener(_pool, _options, NullLoggerFactory.Instance, _bookkeeper, _portal);
+    }
+
+    [Fact]
+    public async Task Sign_in_tokens_resolve_to_their_key_id_until_signed_out()
+    {
+        using FakeSecurityKey key = new();
+
+        await SeenAsync(key, "box");
+        await SignInAsync(key);
+
+        string token = _http.DefaultRequestHeaders.Authorization!.Parameter!;
+        string keyId = NodeProtocol.IdentityFor(key.PublicKey, NodeProtocol.WebAuthnEs256).KeyId;
+
+        Assert.Equal(keyId, _portal.SignedInKeyId(token));
+        Assert.Null(_portal.SignedInKeyId("not-a-token"));
+        Assert.Null(_portal.SignedInKeyId(null));
+
+        Assert.Equal(HttpStatusCode.NoContent, (await _http.PostAsync("api/sign-out", null)).StatusCode);
+
+        Assert.Null(_portal.SignedInKeyId(token));
     }
 
     [Fact]

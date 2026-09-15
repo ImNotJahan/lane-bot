@@ -109,6 +109,9 @@ public sealed class NodePortal(
 
     private readonly PortalSignIns _signIns = new(time ?? TimeProvider.System, options.PortalSignInLifetime);
 
+    /// <summary>The key id a sign-in token was issued to; null if it is unknown, revoked or expired.</summary>
+    public string? SignedInKeyId(string? token) => _signIns.Resolve(token);
+
     public void Map(IEndpointRouteBuilder app)
     {
         app.MapGet("/", () => Results.Stream(

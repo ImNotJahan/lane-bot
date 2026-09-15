@@ -81,9 +81,12 @@ Paths resolve against the binary's directory, so `lane.db`, `Prompts/`, `Books/`
 directory, so run Lane from the target directory (both service definitions set
 `WorkingDirectory`).
 
-`appsettings.json` binds the face (5050) and the API (5080) on every interface. To reach
-them from another network, open both ports in the host firewall and forward them on the
-router, or put the host on a tailnet. The API requires a client key; the face does not.
+`appsettings.json` binds the face (5050), the API (5080) and the dashboard (5090) on every
+interface. To reach them from another network, open those ports in the host firewall and
+forward them on the router, or put the host on a tailnet. The API requires a client key; the
+face does not. The dashboard is open from loopback, and anywhere else requires signing in
+with the security key whose node identity is `Dashboard:OwnerKeyId`, through the node app's
+portal popup like the portal itself (so `Nodes:Enabled` must be on).
 
 ## Optional tools
 

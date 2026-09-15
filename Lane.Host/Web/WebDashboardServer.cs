@@ -9,6 +9,7 @@ using Lane.Core.Models;
 using Lane.Core.Monologue;
 using Lane.Core.Sessions;
 using Lane.Host.Logging;
+using Lane.Nodes.Portal;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -19,7 +20,16 @@ public sealed class DashboardOptions
 {
     public bool Enabled { get; set; } = true;
 
+    /// <summary><c>HttpListener</c> host: <c>localhost</c> for loopback only, <c>+</c> for every interface.</summary>
+    public string Host { get; set; } = "localhost";
+
     public int Port { get; set; } = 5090;
+
+    /// <summary>
+    /// Key id of the security-key node identity allowed to use the dashboard from anywhere but loopback,
+    /// signed in through the node portal. Null refuses every non-loopback request.
+    /// </summary>
+    public string? OwnerKeyId { get; set; }
 
     /// <summary>The file the config editor reads and writes. Defaults beside the executable.</summary>
     public string ConfigPath { get; set; } = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
@@ -32,9 +42,8 @@ public sealed class DashboardOptions
 /// <c>Console.In</c>/<c>Console.Out</c> now that nothing else claims the screen. The browser
 /// polls <c>/api/snapshot</c> rather than holding a streaming connection open, which keeps
 /// this server as simple as <see cref="Lane.Host.Presence.FaceServer"/> beside it. Loopback
-/// only, and unauthenticated for the same reason the face server is: this speaks for Lane's
-/// own configuration, and it is not meant to be reachable from anywhere but the machine
-/// running her.
+/// requests are unauthenticated; any other request to <c>/api/</c> needs a node portal sign-in
+/// token belonging to <see cref="DashboardOptions.OwnerKeyId"/>.
 /// </summary>
 public sealed class WebDashboardServer(
     IEventBus bus,
@@ -45,7 +54,8 @@ public sealed class WebDashboardServer(
     IEnergyService energy,
     IOptions<DashboardOptions> options,
     IHostApplicationLifetime lifetime,
-    ILogger<WebDashboardServer> log) : BackgroundService
+    ILogger<WebDashboardServer> log,
+    NodePortal? portal = null) : BackgroundService
 {
     private readonly DashboardOptions _options = options.Value;
     private readonly ConcurrentDictionary<string, string> _sessionNotes = new();
@@ -70,7 +80,7 @@ public sealed class WebDashboardServer(
         });
 
         using HttpListener listener = new();
-        listener.Prefixes.Add($"http://localhost:{_options.Port}/");
+        listener.Prefixes.Add($"http://{_options.Host}:{_options.Port}/");
 
         try
         {
@@ -82,7 +92,7 @@ public sealed class WebDashboardServer(
             return;
         }
 
-        log.LogInformation("Dashboard at http://localhost:{Port}/", _options.Port);
+        log.LogInformation("Dashboard at http://{Host}:{Port}/", _options.Host, _options.Port);
 
         using CancellationTokenRegistration stop = stoppingToken.Register(listener.Close);
 
@@ -115,6 +125,14 @@ public sealed class WebDashboardServer(
             string path   = context.Request.Url?.AbsolutePath ?? "/";
             string method = context.Request.HttpMethod;
 
+            if (path.StartsWith("/api/", StringComparison.Ordinal) && Unauthorised(context.Request) is { } refusal)
+            {
+                context.Response.StatusCode = 401;
+                await WriteJsonAsync(context, new { error = refusal }, ct).ConfigureAwait(false);
+                context.Response.Close();
+                return;
+            }
+
             switch (path)
             {
                 case "/api/snapshot" when method == "GET":
@@ -136,6 +154,10 @@ public sealed class WebDashboardServer(
 
                 case "/config":
                     await WriteHtmlAsync(context, ConfigPage.Html, ct).ConfigureAwait(false);
+                    break;
+
+                case "/auth.js":
+                    await WriteBytesAsync(context, "text/javascript; charset=utf-8", DashboardAuth.Script, ct).ConfigureAwait(false);
                     break;
 
                 default:
@@ -161,14 +183,39 @@ public sealed class WebDashboardServer(
         await context.Response.OutputStream.WriteAsync(json, ct).ConfigureAwait(false);
     }
 
-    private static async Task WriteHtmlAsync(HttpListenerContext context, string html, CancellationToken ct)
+    private static Task WriteHtmlAsync(HttpListenerContext context, string html, CancellationToken ct) =>
+        WriteBytesAsync(context, "text/html; charset=utf-8", html, ct);
+
+    private static async Task WriteBytesAsync(HttpListenerContext context, string contentType, string text, CancellationToken ct)
     {
-        byte[] page = Encoding.UTF8.GetBytes(html);
+        byte[] bytes = Encoding.UTF8.GetBytes(text);
 
-        context.Response.ContentType = "text/html; charset=utf-8";
-        context.Response.ContentLength64 = page.Length;
+        context.Response.ContentType = contentType;
+        context.Response.ContentLength64 = bytes.Length;
 
-        await context.Response.OutputStream.WriteAsync(page, ct).ConfigureAwait(false);
+        await context.Response.OutputStream.WriteAsync(bytes, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Why the request may not use the API, or null if it may.</summary>
+    private string? Unauthorised(HttpListenerRequest request)
+    {
+        if (IPAddress.IsLoopback(request.RemoteEndPoint.Address)) return null;
+
+        if (portal is null)
+            return "Signing in from another network needs the node listener (Lane:Nodes:Enabled).";
+
+        if (string.IsNullOrWhiteSpace(_options.OwnerKeyId))
+            return "No security key owns this dashboard (Lane:Dashboard:OwnerKeyId).";
+
+        string header = request.Headers["Authorization"] ?? "";
+        string? token = header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) ? header["Bearer ".Length..].Trim() : null;
+
+        return portal.SignedInKeyId(token) switch
+        {
+            null => "Sign in with the dashboard owner's security key.",
+            { } keyId when string.Equals(keyId, _options.OwnerKeyId.Trim(), StringComparison.OrdinalIgnoreCase) => null,
+            _ => "That security key does not own this dashboard."
+        };
     }
 
     private async Task GetConfigAsync(HttpListenerContext context, CancellationToken ct)
