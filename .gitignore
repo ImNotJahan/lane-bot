@@ -12,5 +12,3 @@ Wizard/Books/*
 *.backup-*
 *.zip
 *.txt
-Examples/*/bin/
-Examples/*/obj/

@@ -14,9 +14,6 @@
     <Project Path="Lane.Nodes/Lane.Nodes.csproj" />
     <Project Path="Lane.Node.Sdk/Lane.Node.Sdk.csproj" />
   </Folder>
-  <Folder Name="/examples/">
-    <Project Path="Examples/Lane.Node.OpenAi/Lane.Node.OpenAi.csproj" />
-  </Folder>
   <Folder Name="/test/">
     <Project Path="Lane.Testing/Lane.Testing.csproj" />
     <Project Path="Lane.Tests/Lane.Tests.csproj" />

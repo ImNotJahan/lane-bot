@@ -9,11 +9,19 @@ theme:
 
 nav:
   - Home: index.md
-  - Getting started: getting_started.md
-  - Configuration: configuration.md
-  - Customization: customization.md
-  - How it works: how_it_works.md
-  - Interfaces: interfaces.md
-  - Theory: theory.md
+  - HTTP API: api.md
+  - Nodes: nodes.md
+  - Identities: identities.md
+  - Discord:
+      - Terms of Service: discord_tos.md
+      - Privacy Policy: discord_privacy_policy.md
+  - Archive (v2):
+      - Overview: v2/index.md
+      - Getting started: v2/getting_started.md
+      - Configuration: v2/configuration.md
+      - Customization: v2/customization.md
+      - How it works: v2/how_it_works.md
+      - Interfaces: v2/interfaces.md
+      - Theory: v2/theory.md
 
 repo_url: https://github.com/imnotjahan/lane-bot
