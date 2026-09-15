@@ -12,6 +12,7 @@ using Lane.Core.Models;
 using Lane.Core.Monologue;
 using Lane.Core.Pipeline.Stages;
 using Lane.Core.Prompts;
+using Lane.Core.Recording;
 using Lane.Core.Sessions;
 using Lane.Core.Tools;
 using Lane.Core.Surfaces;
@@ -75,6 +76,7 @@ public static class LaneHostBuilderExtensions
         RegisterTools(builder.Services, section.GetSection("Tools"));
         RegisterSurfaceFactories(builder.Services);
         RegisterNodes(builder.Services, section.GetSection("Nodes"));
+        RegisterRecording(builder.Services, section.GetSection("Recording"));
         RegisterModels(builder.Services, section.GetSection("Models"));
         RegisterSurfaces(builder.Services, section.GetSection("Surfaces"));
 
@@ -495,6 +497,24 @@ public static class LaneHostBuilderExtensions
             secrets.Require(reference, $"API client '{clientId}'");
     }
 
+    /// <summary>Writes every model call, name-redacted, to JSONL for training a node answer classifier.</summary>
+    private static void RegisterRecording(IServiceCollection services, IConfigurationSection section)
+    {
+        ResponseRecordingOptions options = new();
+        section.Bind(options);
+
+        if (!options.Enabled) return;
+
+        services.AddSingleton(sp => new JsonlResponseRecorder(
+            options,
+            () => sp.GetService<ISessionRegistry>()?.Active.SelectMany(s => s.Descriptor.KnownParticipants) ?? [],
+            sp.GetRequiredService<TimeProvider>(),
+            sp.GetRequiredService<ILogger<JsonlResponseRecorder>>()));
+
+        services.AddSingleton<IResponseRecorder>(sp => sp.GetRequiredService<JsonlResponseRecorder>());
+        services.AddHostedService(sp => sp.GetRequiredService<JsonlResponseRecorder>());
+    }
+
     private static void RegisterModels(IServiceCollection services, IConfigurationSection section)
     {
         ModelsOptions options = new();
@@ -601,6 +621,8 @@ public static class LaneHostBuilderExtensions
                 $"Model instance '{options.Id}' names unknown provider '{options.Provider}'. " +
                 "Known providers: anthropic, openrouter, deepseek, openai-compatible, node.")
         };
+
+        if (sp.GetService<IResponseRecorder>() is { } recorder) model = new RecordingLanguageModel(model, recorder);
 
         // Wrapped so every provider reports usage without knowing the bus exists. No role
         // is attached here: one instance can serve several roles, and the dashboard reads

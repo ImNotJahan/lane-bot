@@ -12,6 +12,7 @@ using Lane.Core.Surfaces;
 using Microsoft.Extensions.Logging;
 using NetCord;
 using NetCord.Gateway;
+using NetCord.Rest;
 using Lane.Surfaces.Discord.Presence;
 using Lane.Surfaces.Discord.Voice;
 
@@ -39,6 +40,7 @@ public sealed class DiscordSurface : ISurface
     private readonly IEventBus              _bus;
     private readonly AudioRouter?           _router;
     private readonly ISponsoredAccess?      _sponsored;
+    private readonly DiscordConsent         _consent;
     private readonly ILogger<DiscordSurface> _log;
 
     /// <summary>Channels Lane has already attached to, so a second message does not attach twice.</summary>
@@ -57,6 +59,8 @@ public sealed class DiscordSurface : ISurface
 
     private CancellationTokenSource? _lifetime;
 
+    private int _commandsRegistered;
+
     public DiscordSurface(
         SurfaceId id,
         string token,
@@ -66,9 +70,11 @@ public sealed class DiscordSurface : ISurface
         IIdentityResolver identity,
         IEventBus bus,
         ILogger<DiscordSurface> log,
+        DiscordConsent consent,
         AudioRouter? router = null,
         ISponsoredAccess? sponsored = null)
     {
+        _consent   = consent;
         _router    = router;
         _sponsored = sponsored;
         ArgumentException.ThrowIfNullOrWhiteSpace(token);
@@ -95,6 +101,7 @@ public sealed class DiscordSurface : ISurface
         _client.Disconnect       += OnDisconnect;
         _client.GuildCreate      += OnGuildCreate;
         _client.VoiceStateUpdate += OnVoiceStateUpdate;
+        _client.InteractionCreate += OnInteractionCreate;
     }
 
     public SurfaceId Id { get; }
@@ -162,6 +169,51 @@ public sealed class DiscordSurface : ISurface
         // Presence belongs to the gateway session, so a reconnect starts her blank-faced
         // unless the line is sent again.
         _status.Refresh();
+
+        if (Interlocked.Exchange(ref _commandsRegistered, 1) == 0) _ = RegisterCommandsAsync(args.ApplicationId);
+
+        return default;
+    }
+
+    /// <summary>Replaces the application's global commands with <see cref="DiscordCommands.Definitions"/>.</summary>
+    private async Task RegisterCommandsAsync(ulong applicationId)
+    {
+        try
+        {
+            await _client.Rest.BulkOverwriteGlobalApplicationCommandsAsync(
+                applicationId,
+                DiscordCommands.Definitions,
+                cancellationToken: _lifetime?.Token ?? CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Interlocked.Exchange(ref _commandsRegistered, 0);
+            _log.LogWarning(ex, "Could not register slash commands for Discord surface {Surface}", Id);
+        }
+    }
+
+    private ValueTask OnInteractionCreate(Interaction interaction)
+    {
+        if (interaction is not SlashCommandInteraction command) return default;
+        if (DiscordCommands.ReplyTo(command.Data.Name) is not { } reply) return default;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                if (DiscordCommands.ConsentSetBy(command.Data.Name) is { } optedIn)
+                    await _consent.SetAsync(command.User.Id, optedIn, _lifetime?.Token ?? CancellationToken.None)
+                        .ConfigureAwait(false);
+
+                await command.SendResponseAsync(InteractionCallback.Message(
+                    new InteractionMessageProperties().WithContent(reply).WithFlags(MessageFlags.Ephemeral)))
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _log.LogWarning(ex, "Could not answer /{Command}", command.Data.Name);
+            }
+        });
 
         return default;
     }
@@ -247,6 +299,10 @@ public sealed class DiscordSurface : ISurface
         {
             if (message.Author.Id == _client.Id) return;                       // her own words
             if (message.Author.IsBot && !_options.RespondToBots) return;
+
+            if (_options.RequireOptIn && !message.Author.IsBot &&
+                !await _consent.IsOptedInAsync(message.Author.Id, _lifetime?.Token ?? CancellationToken.None).ConfigureAwait(false))
+                return;
 
             bool isDirect = message.GuildId is null;
 

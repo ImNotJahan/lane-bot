@@ -300,3 +300,37 @@ node → lane   failure    { requestId, message }
   own serialisation of the response, so a node in another language has to reproduce it byte for byte. That is the main
   reason to prefer the SDK.
 - A hello with the wrong protocol version, or no hello within the timeout, closes the socket with a policy violation.
+
+---
+
+## Response recording
+
+To build a classifier that checks node answers, Lane can record every model call it makes, including calls answered by
+providers and by nodes. Turn it on with `Lane:Recording`:
+
+```jsonc
+"Recording": { "Enabled": true, "Directory": "training", "QueueCapacity": 1024 }
+```
+
+Each call is one line in `<Directory>/responses-yyyy-MM-dd.jsonl` (UTC date). A relative `Directory` is resolved
+against the build output. Records are written on a background task. A call that fails isn't recorded, and records that
+arrive while `QueueCapacity` are already waiting are dropped with a warning.
+
+| Field | Meaning |
+|---|---|
+| `v` | Record format version, currently `1`. |
+| `id`, `trace_id`, `timestamp` | Record id, the request's trace id, and when the model answered. |
+| `task` | What the call was for: `respond`, `monologue`, `routing`, `summarize` or `profile`. |
+| `model` | `{ instance, provider, id }`. |
+| `source` | `provider` or `node`. Node records also carry `node: { key_id, algorithm }`. |
+| `params` | `max_output_tokens`, `temperature`, `tool_choice`, and `stop_sequences` and `response_format` when set. |
+| `tools` | `{ name, description, parameters }` for every tool offered. |
+| `messages` | The prompt as an OpenAI-style chat array: one `system` message, then `user`, `assistant` (with `tool_calls`) and `tool` messages. User messages carry the same `Name: ` speaker prefix the model saw. Images become `[image]`. |
+| `completion` | The answer as an `assistant` message, with `reasoning` when the model returned thinking. |
+| `stop_reason`, `usage` | How the call ended, and its token counts and latency. |
+
+**Names are redacted.** Before a record is written, every display name and global user id Lane knows is replaced with
+a placeholder such as `[NAME_1]`. That means the authors of the request's messages and everyone in a currently active
+session. Within one record, every name a person goes by gets the same placeholder. Matching is by whole word and
+ignores case, and `Lane` is left alone. A name Lane doesn't know about isn't redacted, such as a friend someone
+mentions in passing, or someone who appears in memory but isn't in any active session.

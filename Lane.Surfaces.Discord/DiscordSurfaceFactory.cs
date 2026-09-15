@@ -3,6 +3,7 @@ using Lane.Core.Credits;
 using Lane.Core.Events;
 using Lane.Core.Identity;
 using Lane.Core.Kernel;
+using Lane.Core.Memory;
 using Lane.Core.Sessions;
 using Lane.Core.Surfaces;
 using Microsoft.Extensions.Configuration;
@@ -19,6 +20,8 @@ public interface IDiscordTokenSource
 
 public sealed class DiscordSurfaceFactory(IDiscordTokenSource tokens) : ISurfaceFactory
 {
+    private DiscordConsent? _consent;
+
     public string TypeName => "discord";
 
     public ISurface Create(SurfaceId id, IConfiguration options, IServiceProvider services)
@@ -39,6 +42,7 @@ public sealed class DiscordSurfaceFactory(IDiscordTokenSource tokens) : ISurface
             services.GetRequiredService<IIdentityResolver>(),
             services.GetRequiredService<IEventBus>(),
             services.GetRequiredService<ILogger<DiscordSurface>>(),
+            _consent ??= new DiscordConsent(services.GetService<IKeyValueStore>()),
             services.GetService<AudioRouter>(),
             services.GetService<ISponsoredAccess>());
     }

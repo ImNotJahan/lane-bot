@@ -35,6 +35,9 @@ public sealed class DiscordSurfaceOptions
     /// </summary>
     public bool RespondToBots { get; set; }
 
+    /// <summary>Ignore messages from people until they run /opt-in. Bots are exempt.</summary>
+    public bool RequireOptIn { get; set; } = true;
+
     /// <summary>
     /// Which conversations share memory. <c>{surface}</c>, <c>{guild}</c> and
     /// <c>{channel}</c> are substituted. Point two channels at one group and Lane carries
