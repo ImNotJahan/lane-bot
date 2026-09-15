@@ -83,7 +83,8 @@ cp -p "$SOURCE"/Lane.Host/Prompts/*.md "$DATA/Prompts/"
 say "Prompts/               <- Lane.Host/Prompts ($(ls -1 "$DATA/Prompts" | wc -l | tr -d ' ') templates)"
 
 # --- Memory database ----------------------------------------------------------
-# Whatever Lane remembers — sessions, profiles, notes, book positions — is all in here.
+# Whatever Lane remembers — sessions, profiles, notes, book positions, node identities,
+# credits, sponsorships, the forum — is all in here.
 
 if [ -z "$DB" ]; then
     for candidate in \
@@ -103,6 +104,22 @@ if [ -n "$DB" ] && [ -f "$DB" ]; then
         rm -f "$DATA/lane.db"
         sqlite3 "$DB" ".backup '$DATA/lane.db'"
         say "lane.db                <- $DB (sqlite3 snapshot, $(wc -c < "$DATA/lane.db" | tr -d ' ') bytes)"
+
+        # Every table the schema declares, so tables added by new features are checked too.
+        SCHEMA="$SOURCE/Lane.Memory/Sqlite/LaneDatabase.cs"
+        if [ -f "$SCHEMA" ]; then
+            MISSING_TABLES=""
+            for table in $(sed -n 's/.*CREATE TABLE IF NOT EXISTS \([A-Za-z_][A-Za-z0-9_]*\).*/\1/p' "$SCHEMA"); do
+                rows="$(sqlite3 "$DATA/lane.db" "SELECT count(*) FROM $table" 2>/dev/null)" || {
+                    MISSING_TABLES="$MISSING_TABLES $table"
+                    continue
+                }
+                say "  $(printf '%-22s' "$table") $rows rows"
+            done
+            if [ -n "$MISSING_TABLES" ]; then
+                warn "$DB lacks:$MISSING_TABLES — start the current build once so it creates them, then collect again."
+            fi
+        fi
     else
         cp -p "$DB" "$DATA/lane.db"
         if [ -f "$DB-wal" ]; then cp -p "$DB-wal" "$DATA/lane.db-wal"; fi

@@ -372,9 +372,10 @@
     <input type="file" accept=".pem,.key,text/plain" data-key-file hidden>
   </div>
   <p class="notice" data-host-notice hidden>
-    Security keys only work when this page is opened at localhost: through your node app at
-    <code>http://localhost:5075/lane/</code>, or at localhost on Lane's own machine.
+    Security keys sign in through your node app, so it must be running on this device at
+    <code>http://localhost:5075</code>.
   </p>
+  <p class="notice" data-relay-notice hidden></p>
   <p class="error" data-sign-in-error hidden></p>
 </template>
 
@@ -466,9 +467,41 @@
   const localNode = fetch("../api/state").then(r => r.ok ? r.json() : null).catch(() => null);
   const localKeyPair = localNode.then(state => state?.settings?.identity === "KeyFile" && Boolean(state.keyFileId));
 
+  // Security keys are registered at localhost, so pages elsewhere sign in through a node app popup that relays the token back.
+  const NODE_APP_PORTAL = "http://localhost:5075/lane/";
+  const requestedRelay = new URLSearchParams(location.search).get("relay");
+  let signInPopup = null;
+
+  /** The opener's origin, if it is the Lane this node app connects to. */
+  const relayOrigin = localNode.then(state => {
+    if (!requestedRelay || !window.opener || !state?.settings?.laneUrl) return null;
+    try {
+      const lane = new URL(state.settings.laneUrl);
+      const scheme = { "ws:": "http:", "wss:": "https:" }[lane.protocol] ?? lane.protocol;
+      return `${scheme}//${lane.host}` === requestedRelay ? requestedRelay : null;
+    } catch {
+      return null;
+    }
+  });
+
+  window.addEventListener("message", event => {
+    if (!signInPopup || event.source !== signInPopup || event.data?.type !== "lane-sign-in") return;
+    signInPopup = null;
+    signedIn(event.data.token);
+  });
+
   for (const slot of document.querySelectorAll("[data-signed-out]")) {
     slot.append($("sign-in-template").content.cloneNode(true));
     slot.querySelector("[data-host-notice]").hidden = location.hostname === "localhost";
+    const relayNotice = slot.querySelector("[data-relay-notice]");
+    relayOrigin.then(origin => {
+      if (!requestedRelay) return;
+      relayNotice.className = origin ? "notice" : "error";
+      relayNotice.textContent = origin
+        ? `Signing in for ${origin}; this window closes once you are signed in.`
+        : `This node app connects to a different Lane than ${requestedRelay}, so it will not sign you in there.`;
+      relayNotice.hidden = false;
+    });
     const button = slot.querySelector("[data-sign-in]");
     const keyButton = slot.querySelector("[data-key-sign-in]");
     const keyFile = slot.querySelector("[data-key-file]");
@@ -493,6 +526,11 @@
   }
 
   async function signedIn(value) {
+    const origin = await relayOrigin;
+    if (origin) {
+      window.opener.postMessage({ type: "lane-sign-in", token: value }, origin);
+      window.close();
+    }
     setToken(value);
     await loadWallet();
     if (location.hash === "#sponsor") loadSponsorships();
@@ -547,8 +585,15 @@
     return { publicKey: toBase64Url(publicKey), signature: toBase64Url(signature) };
   }
 
+  function relaySignIn(error) {
+    const url = `${NODE_APP_PORTAL}?relay=${encodeURIComponent(location.origin)}${location.hash}`;
+    signInPopup = window.open(url, "lane-sign-in", "popup,width=560,height=640");
+    if (!signInPopup) showMessage(error, "Allow popups for this page, then try again.", "error");
+  }
+
   async function signIn(button, error) {
     error.hidden = true;
+    if (location.hostname !== "localhost") return relaySignIn(error);
     button.disabled = true;
     try {
       if (!window.PublicKeyCredential) throw new Error("This browser does not support security keys.");

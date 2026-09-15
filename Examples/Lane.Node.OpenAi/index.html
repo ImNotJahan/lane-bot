@@ -66,7 +66,6 @@
 <main>
   <header>
     <h1>Lane node</h1>
-    <a href="lane/" target="_blank" style="margin-left: auto">Leaderboard &amp; wallet</a>
     <span class="pill" id="status"><span class="dot"></span><span id="status-text">Loading…</span></span>
   </header>
 
@@ -83,7 +82,7 @@
   <form class="panel" id="settings" novalidate>
     <h2>Lane</h2>
     <div class="grid">
-      <label>Lane URL <input name="laneUrl" placeholder="ws://127.0.0.1:5070"></label>
+      <label>Lane URL <input name="laneUrl" placeholder="ws://http://204.168.211.4/:5070"></label>
       <label>Pool <input name="pool"></label>
       <label>Node name <input name="name"></label>
       <label>Max concurrent requests <input name="concurrency" type="number" min="1"></label>
@@ -132,8 +131,7 @@
       <button type="button" id="generate-key">Generate key pair</button>
     </div>
     <p class="muted" data-for="KeyFile">
-      Anyone with this file can act as your identity and spend its credits, so keep it private. Back it up too: without it,
-      the identity and its credits are gone. To sign in to the portal elsewhere, pick this file on its sign-in page.
+      Keep this file safe and don't lose it, as it acts as your password!
     </p>
     <div class="row security-key" data-for="SecurityKey">
       <span id="registered">No security key registered.</span>
@@ -164,7 +162,7 @@
     <circle cx="12" cy="9" r="2.2"></circle>
   </svg>
   <h2>Security key</h2>
-  <p>Insert your security key and touch it when it flashes to start the node.</p>
+  <p>Insert your security key and tap it to start the node</p>
   <p class="error" id="touch-error" hidden></p>
   <div class="row" style="justify-content: center; margin-top: 16px">
     <button type="button" id="touch-stop">Stop node</button>
