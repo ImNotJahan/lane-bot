@@ -378,6 +378,35 @@ public sealed class MonologueTests : IAsyncDisposable
         Assert.Contains("discord.main/Text/general", system);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task She_sees_every_conversations_messages_only_when_configured(bool seeAll)
+    {
+        ScriptedLanguageModel model = ScriptedLanguageModel.Echoing("hm");
+
+        MonologueService monologue = Build(model, out LaneHarness harness, o => o.SeeAllMessages = seeAll);
+
+        RecordingChannel general  = harness.OpenSession("discord.main", "general", memoryGroup: "m/general");
+        RecordingChannel offtopic = harness.OpenSession("discord.main", "offtopic", memoryGroup: "m/offtopic");
+
+        await harness.SendAsync(general, "alice", "the kettle is broken");
+        await general.WaitForAsync(1, Timeout);
+        await harness.SendAsync(offtopic, "bob", "cuttlefish are underrated");
+        await offtopic.WaitForAsync(1, Timeout);
+
+        int before = harness.Model.Requests.Count;
+
+        await monologue.StartAsync(CancellationToken.None);
+        await Eventually(() => monologue.Status.LastThought, Timeout);
+        await monologue.StopAsync(CancellationToken.None);
+
+        string system = string.Join("\n", harness.Model.Requests[before].System.Select(s => s.Text));
+
+        Assert.Equal(seeAll, system.Contains("the kettle is broken"));
+        Assert.Equal(seeAll, system.Contains("cuttlefish are underrated"));
+    }
+
     // ---- tiredness ---------------------------------------------------------
 
     /// <summary>A metabolism a test can set directly, rather than one it has to exhaust.</summary>

@@ -183,14 +183,16 @@ public static class LaneHostBuilderExtensions
 
         services.AddLaneMonologue(o =>
         {
-            o.Enabled         = options.Enabled;
-            o.Interval        = options.Interval;
-            o.AfterMessage    = options.AfterMessage;
-            o.MinInterval     = options.MinInterval;
-            o.MaxInterval     = options.MaxInterval;
-            o.StartupDelay    = options.StartupDelay;
-            o.Prompt          = options.Prompt;
-            o.MaxOutputTokens = options.MaxOutputTokens;
+            o.Enabled          = options.Enabled;
+            o.Interval         = options.Interval;
+            o.AfterMessage     = options.AfterMessage;
+            o.MinInterval      = options.MinInterval;
+            o.MaxInterval      = options.MaxInterval;
+            o.StartupDelay     = options.StartupDelay;
+            o.Prompt           = options.Prompt;
+            o.MaxOutputTokens  = options.MaxOutputTokens;
+            o.SeeAllMessages   = options.SeeAllMessages;
+            o.AllMessagesLimit = options.AllMessagesLimit;
         });
     }
 

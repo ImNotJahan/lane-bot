@@ -226,7 +226,10 @@ public sealed class MonologueService : BackgroundService, IMonologueScheduler
             AgentRunResult result = await _loop.RunAsync(new AgentRunRequest
             {
                 Model  = model,
-                System = [new PromptBlock(BuildPrompt(), CacheHint.Ephemeral), .. assembled.SystemBlocks],
+                System = [
+                    new PromptBlock(BuildPrompt(), CacheHint.Ephemeral),
+                    .. assembled.SystemBlocks,
+                    .. await DescribeAllMessagesAsync(ct).ConfigureAwait(false)],
 
                 // The interior monologue has no conversation to continue, so it is opened
                 // with a plain nudge rather than a transcript.
@@ -369,6 +372,27 @@ public sealed class MonologueService : BackgroundService, IMonologueScheduler
         }
 
         return sb.ToString().TrimEnd();
+    }
+
+    private async ValueTask<PromptBlock[]> DescribeAllMessagesAsync(CancellationToken ct)
+    {
+        if (!_options.SeeAllMessages || _options.AllMessagesLimit <= 0) return [];
+
+        // The transcript has no kind filter, so over-fetch to leave room for thoughts.
+        IReadOnlyList<LaneMessage> recent = await _transcript
+            .ReadAsync(new TranscriptQuery { Limit = _options.AllMessagesLimit * 4 }, ct)
+            .ConfigureAwait(false);
+
+        LaneMessage[] utterances = [.. recent
+            .Where(m => m.Kind == MessageKind.Utterance && m.Session is not null)
+            .TakeLast(_options.AllMessagesLimit)];
+
+        if (utterances.Length == 0) return [];
+
+        string body = _formatter.Format(utterances, new TranscriptFormatOptions(
+            TimeSpan.Zero, IncludeRelativeTime: true, IncludeSessionLabels: true));
+
+        return [new PromptBlock($"## Recent messages across all conversations\n\n{body}", CacheHint.None)];
     }
 
     private static string Describe(TimeSpan idle) => idle switch

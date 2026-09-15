@@ -30,6 +30,15 @@ public sealed class MonologueOptions
     public int MaxOutputTokens { get; set; } = 512;
 
     /// <summary>
+    /// Shows each thought the most recent utterances from every conversation, labelled by
+    /// session, drawn from the transcript rather than any memory handler.
+    /// </summary>
+    public bool SeeAllMessages { get; set; }
+
+    /// <summary>How many utterances <see cref="SeeAllMessages"/> shows.</summary>
+    public int AllMessagesLimit { get; set; } = 40;
+
+    /// <summary>
     /// Roomier than a reply's budget on purpose: a thought that looks around, reads
     /// something and then schedules itself has spent three steps before it has said
     /// anything, and running out mid-way leaves her with no thought at all.
