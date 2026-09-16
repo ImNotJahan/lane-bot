@@ -11,6 +11,9 @@ public sealed class NodesOptions
 
     public TimeSpan RequestTimeout { get; set; } = TimeSpan.FromMinutes(5);
 
+    /// <summary>How many nodes a single request may be tried on before it gives up.</summary>
+    public int MaxAttempts { get; set; } = 3;
+
     /// <summary>How long a new connection has to send its hello.</summary>
     public TimeSpan HelloTimeout { get; set; } = TimeSpan.FromSeconds(10);
 

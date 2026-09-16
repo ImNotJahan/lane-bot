@@ -45,6 +45,27 @@ public sealed class NodeLanguageModel : ILanguageModel
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        int attempts = Math.Max(1, _options.MaxAttempts);
+
+        for (int attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await AttemptAsync(request, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (attempt < attempts && IsRetryable(ex) && !ct.IsCancellationRequested)
+            {
+                _log.LogWarning(ex, "{Model} attempt {Attempt} of {Attempts} failed; retrying on another node",
+                    Descriptor.InstanceId, attempt, attempts);
+            }
+        }
+    }
+
+    private static bool IsRetryable(Exception ex) =>
+        ex is TimeoutException or NodeDisconnectedException or NodeRequestFailedException or NodeResponseRejectedException;
+
+    private async Task<ModelResponse> AttemptAsync(ModelRequest request, CancellationToken ct)
+    {
         using NodeLease lease = await _nodes.AcquireAsync(_pool, _options.AcquireTimeout, ct).ConfigureAwait(false);
 
         NodeConnection node = lease.Node;

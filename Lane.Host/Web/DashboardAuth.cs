@@ -26,7 +26,7 @@ public static class DashboardAuth
               <strong style="color:#8fb4ff;letter-spacing:.08em;text-transform:uppercase;font-size:12px">sign in</strong>
               <div data-reason style="color:#6b7280"></div>
               <div>Your node app must be running on this device at <code>http://localhost:5075</code>.</div>
-              <button type="button" style="font:inherit;background:#2b5f4a;border:1px solid #3a7a5f;color:#d8ffe9;border-radius:5px;padding:6px 12px;cursor:pointer;justify-self:start">Sign in with security key</button>
+              <button type="button" style="font:inherit;background:#2b5f4a;border:1px solid #3a7a5f;color:#d8ffe9;border-radius:5px;padding:6px 12px;cursor:pointer;justify-self:start">Sign in with your node app</button>
               <div data-error style="color:#ff9494" hidden></div>
             </div>`;
 

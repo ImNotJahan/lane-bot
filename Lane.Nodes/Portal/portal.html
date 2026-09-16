@@ -368,11 +368,11 @@
   <p>Sign in with either your hardware key or key pair (the same one you use for your node)</p>
   <div class="row">
     <button class="primary" type="button" data-sign-in>Sign in with security key</button>
-    <button type="button" data-key-sign-in>Sign in with key pair file</button>
+    <button type="button" data-key-sign-in>Sign in with key pair</button>
     <input type="file" accept=".pem,.key,text/plain" data-key-file hidden>
   </div>
   <p class="notice" data-host-notice hidden>
-    Security keys sign in through your node app, so it must be running on this device at
+    Both sign in through your node app, so it must be running on this device at
     <code>http://localhost:5075</code>.
   </p>
   <p class="notice" data-relay-notice hidden></p>
@@ -467,7 +467,8 @@
   const localNode = fetch("../api/state").then(r => r.ok ? r.json() : null).catch(() => null);
   const localKeyPair = localNode.then(state => state?.settings?.identity === "KeyFile" && Boolean(state.keyFileId));
 
-  // Security keys are registered at localhost, so pages elsewhere sign in through a node app popup that relays the token back.
+  // The node app holds the security key registration and the key file, so pages elsewhere sign in through a popup on it that
+  // relays the token back.
   const NODE_APP_PORTAL = "http://localhost:5075/lane/";
   const requestedRelay = new URLSearchParams(location.search).get("relay");
   let signInPopup = null;
@@ -509,7 +510,9 @@
     const error = slot.querySelector("[data-sign-in-error]");
     button.addEventListener("click", () => signIn(button, error));
     keyButton.addEventListener("click", async () => {
+      error.hidden = true;
       if (await localKeyPair) keySignIn(keyButton, error, null);
+      else if (location.hostname !== "localhost") relaySignIn(error);
       else keyFile.click();
     });
     keyFile.addEventListener("change", () => {
@@ -519,6 +522,7 @@
     });
     localKeyPair.then(local => {
       if (local) keyButton.textContent = "Sign in with this node's key pair";
+      else if (location.hostname === "localhost") keyButton.textContent = "Sign in with key pair file";
     });
   }
 
