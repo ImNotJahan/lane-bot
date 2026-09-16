@@ -5,7 +5,8 @@ using Microsoft.Extensions.Logging;
 
 namespace Lane.Nodes;
 
-/// <summary>A model instance answered by whichever node in its pool is least busy.</summary>
+/// <summary>A model instance answered by whichever node in its pool is least busy, or by a fallback
+/// model when the pool cannot answer at all.</summary>
 public sealed class NodeLanguageModel : ILanguageModel
 {
     private readonly string                     _pool;
@@ -14,6 +15,7 @@ public sealed class NodeLanguageModel : ILanguageModel
     private readonly NodesOptions               _options;
     private readonly ILogger<NodeLanguageModel> _log;
     private readonly NodeBookkeeper?            _bookkeeper;
+    private readonly Func<ILanguageModel?>?     _fallback;
 
     public NodeLanguageModel(
         string                     instanceId,
@@ -23,7 +25,8 @@ public sealed class NodeLanguageModel : ILanguageModel
         INodeResponseValidator     validator,
         NodesOptions               options,
         ILogger<NodeLanguageModel> log,
-        NodeBookkeeper?            bookkeeper = null)
+        NodeBookkeeper?            bookkeeper = null,
+        Func<ILanguageModel?>?     fallback   = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(pool);
 
@@ -33,6 +36,7 @@ public sealed class NodeLanguageModel : ILanguageModel
         _options    = options;
         _log        = log;
         _bookkeeper = bookkeeper;
+        _fallback   = fallback;
 
         Descriptor = new ModelDescriptor(instanceId, "node", $"pool:{pool}", capabilities);
 
@@ -45,6 +49,43 @@ public sealed class NodeLanguageModel : ILanguageModel
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        (ModelResponse? answer, ILanguageModel? fallback) = await ServeAsync(request, ct).ConfigureAwait(false);
+
+        return answer ?? await fallback!.CompleteAsync(request, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Answers from the pool, or names the fallback model to use instead. The pool is skipped outright
+    /// when it holds no nodes, so a request does not spend the acquire timeout waiting for one to join.
+    /// </summary>
+    private async Task<(ModelResponse? Answer, ILanguageModel? Fallback)> ServeAsync(
+        ModelRequest request, CancellationToken ct)
+    {
+        if (!_nodes.HasNodes(_pool) && _fallback?.Invoke() is { } idle)
+        {
+            _log.LogWarning("{Model} has no nodes in pool '{Pool}'; falling back to {Fallback}",
+                Descriptor.InstanceId, _pool, idle.Descriptor.InstanceId);
+
+            return (null, idle);
+        }
+
+        try
+        {
+            return (await CompleteOnNodesAsync(request, ct).ConfigureAwait(false), null);
+        }
+        catch (Exception ex) when (IsFallbackWorthy(ex) && !ct.IsCancellationRequested && _fallback?.Invoke() is not null)
+        {
+            ILanguageModel fallback = _fallback!.Invoke()!;
+
+            _log.LogWarning(ex, "{Model} could not be served by pool '{Pool}'; falling back to {Fallback}",
+                Descriptor.InstanceId, _pool, fallback.Descriptor.InstanceId);
+
+            return (null, fallback);
+        }
+    }
+
+    private async Task<ModelResponse> CompleteOnNodesAsync(ModelRequest request, CancellationToken ct)
+    {
         int attempts = Math.Max(1, _options.MaxAttempts);
 
         for (int attempt = 1; ; attempt++)
@@ -60,6 +101,8 @@ public sealed class NodeLanguageModel : ILanguageModel
             }
         }
     }
+
+    private static bool IsFallbackWorthy(Exception ex) => ex is NodeUnavailableException || IsRetryable(ex);
 
     private static bool IsRetryable(Exception ex) =>
         ex is TimeoutException or NodeDisconnectedException or NodeRequestFailedException or NodeResponseRejectedException;
@@ -104,17 +147,27 @@ public sealed class NodeLanguageModel : ILanguageModel
         return response;
     }
 
-    /// <summary>Emits the finished response as one delta.</summary>
+    /// <summary>Emits the finished response as one delta; a fallback model streams as it normally would.</summary>
     public async IAsyncEnumerable<ModelStreamEvent> StreamAsync(
         ModelRequest request, [EnumeratorCancellation] CancellationToken ct)
     {
-        ModelResponse response = await CompleteAsync(request, ct).ConfigureAwait(false);
+        ArgumentNullException.ThrowIfNull(request);
 
-        if (response.Text.Length > 0) yield return new ModelStreamEvent.TextDelta(response.Text);
+        (ModelResponse? answer, ILanguageModel? fallback) = await ServeAsync(request, ct).ConfigureAwait(false);
 
-        foreach (Lane.Core.Messages.ToolUsePart call in response.ToolCalls)
+        if (answer is null)
+        {
+            await foreach (ModelStreamEvent streamed in fallback!.StreamAsync(request, ct).ConfigureAwait(false))
+                yield return streamed;
+
+            yield break;
+        }
+
+        if (answer.Text.Length > 0) yield return new ModelStreamEvent.TextDelta(answer.Text);
+
+        foreach (Lane.Core.Messages.ToolUsePart call in answer.ToolCalls)
             yield return new ModelStreamEvent.ToolUseStarted(call.ToolCallId, call.ToolName);
 
-        yield return new ModelStreamEvent.Completed(response);
+        yield return new ModelStreamEvent.Completed(answer);
     }
 }

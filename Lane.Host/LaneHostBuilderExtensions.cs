@@ -651,7 +651,20 @@ public static class LaneHostBuilderExtensions
             sp.GetRequiredService<INodeResponseValidator>(),
             nodes,
             sp.GetRequiredService<ILogger<NodeLanguageModel>>(),
-            sp.GetRequiredService<NodeBookkeeper>());
+            sp.GetRequiredService<NodeBookkeeper>(),
+            () => ResolveFallbackModel(options.Id, sp));
+    }
+
+    /// <summary>The instance a node model hands unanswerable requests to. Resolved per request rather
+    /// than at construction, since the fallback is itself one of the instances being built.</summary>
+    private const string FallbackInstanceId = "default";
+
+    private static ILanguageModel? ResolveFallbackModel(string instanceId, IServiceProvider sp)
+    {
+        if (instanceId.Equals(FallbackInstanceId, StringComparison.OrdinalIgnoreCase)) return null;
+
+        return sp.GetServices<ILanguageModel>().FirstOrDefault(m =>
+            m.Descriptor.InstanceId.Equals(FallbackInstanceId, StringComparison.OrdinalIgnoreCase));
     }
 
     private static string ResolveEndpoint(ModelInstanceOptions options)

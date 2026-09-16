@@ -673,7 +673,7 @@ hundreds of models whose tool support differs completely, so a model says what i
 and startup holds it to that:
 
 ```jsonc
-{ "Id": "ds-flash", "Provider": "openrouter", "Model": "deepseek/deepseek-v4-flash",
+{ "Id": "default", "Provider": "openrouter", "Model": "deepseek/deepseek-v4-flash",
   "KeyRef": "env:OPENROUTER_API_KEY", "Capabilities": ["Tools", "Streaming"] }
 ```
 

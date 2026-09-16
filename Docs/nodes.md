@@ -32,6 +32,10 @@ What this means for a node:
   model instance promises (for example `Tools`), Lane logs a warning but still sends you requests. Declare only what you
   can actually do.
 - **Replies are not streamed.** Lane waits for your whole response and hands it on in one piece.
+- **An empty pool falls through.** A model instance whose pool has no nodes connected is served by the pool named
+  `default`; if that one is empty too, the request goes to the model instance with the id `default`, so a host with no
+  nodes online keeps answering on an ordinary provider. Requests only wait out `AcquireTimeout` when the pool does
+  have nodes and they are all busy.
 - **Timeouts.** You have 10 seconds after connecting to send your hello (`HelloTimeout`). A request waits up to 30
   seconds for a free slot in the pool (`AcquireTimeout`), and your node then has 5 minutes to answer
   (`RequestTimeout`).

@@ -92,6 +92,13 @@ public sealed class NodePool(IEventBus? bus = null, ILogger<NodePool>? log = nul
         }
     }
 
+    /// <summary>Whether <paramref name="pool"/>, or the default pool it falls back to, has any node
+    /// connected at all — busy or not.</summary>
+    public bool HasNodes(string pool)
+    {
+        lock (_gate) return Members(pool, out _) is { Count: > 0 };
+    }
+
     /// <summary>
     /// Reserves a slot on the least-busy node in <paramref name="pool"/>, rotating between equally busy
     /// nodes. Waits up to <paramref name="timeout"/> for one to become free. A pool with no nodes at all
@@ -143,16 +150,7 @@ public sealed class NodePool(IEventBus? bus = null, ILogger<NodePool>? log = nul
 
     private NodeConnection? TryReserve(string requested)
     {
-        string pool = requested;
-
-        if ((!_pools.TryGetValue(pool, out List<NodeConnection>? members) || members.Count == 0)
-            && !pool.Equals(DefaultPool, StringComparison.OrdinalIgnoreCase))
-        {
-            pool = DefaultPool;
-            _pools.TryGetValue(pool, out members);
-        }
-
-        if (members is null || members.Count == 0) return null;
+        if (Members(requested, out string pool) is not { Count: > 0 } members) return null;
 
         int cursor = _cursors.GetValueOrDefault(pool);
 
@@ -179,6 +177,21 @@ public sealed class NodePool(IEventBus? bus = null, ILogger<NodePool>? log = nul
         _cursors[pool] = bestIndex + 1;
 
         return best;
+    }
+
+    /// <summary>The members of <paramref name="requested"/>, or of the default pool when that one has none.</summary>
+    private List<NodeConnection>? Members(string requested, out string pool)
+    {
+        pool = requested;
+
+        if ((!_pools.TryGetValue(pool, out List<NodeConnection>? members) || members.Count == 0)
+            && !pool.Equals(DefaultPool, StringComparison.OrdinalIgnoreCase))
+        {
+            pool = DefaultPool;
+            _pools.TryGetValue(pool, out members);
+        }
+
+        return members;
     }
 
     private void Signal()

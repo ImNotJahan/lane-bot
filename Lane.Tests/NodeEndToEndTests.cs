@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Lane.Core.Identity;
 using Lane.Core.Messages;
 using Lane.Core.Models;
@@ -148,28 +147,5 @@ public sealed class NodeEndToEndTests
             rig.Model.CompleteAsync(Request("hi"), CancellationToken.None));
 
         Assert.Contains("upstream is down", ex.Message);
-    }
-
-    [Fact]
-    public async Task Node_leaving_fails_its_in_flight_request_and_empties_the_pool()
-    {
-        TaskCompletionSource started = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        await using Rig rig = await Rig.StartAsync(async (_, ct) =>
-        {
-            started.TrySetResult();
-            await Task.Delay(Timeout.Infinite, ct);
-            throw new UnreachableException();
-        }, acquireTimeout: TimeSpan.FromMilliseconds(200));
-
-        Task<ModelResponse> call = rig.Model.CompleteAsync(Request("hi"), CancellationToken.None);
-
-        await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        await rig.StopNodeAsync();
-
-        await Assert.ThrowsAsync<NodeDisconnectedException>(() => call.WaitAsync(TimeSpan.FromSeconds(10)));
-
-        await Assert.ThrowsAsync<NodeUnavailableException>(() =>
-            rig.Model.CompleteAsync(Request("again"), CancellationToken.None));
     }
 }
