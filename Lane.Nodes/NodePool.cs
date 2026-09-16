@@ -17,6 +17,8 @@ public sealed record NodeSummary(
 /// <summary>Every connected node, grouped by the pool each one named in its hello.</summary>
 public sealed class NodePool(IEventBus? bus = null, ILogger<NodePool>? log = null)
 {
+    public const string DefaultPool = "default";
+
     private readonly Lock _gate = new();
     private readonly Dictionary<string, List<NodeConnection>> _pools    = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int>                  _cursors  = new(StringComparer.OrdinalIgnoreCase);
@@ -92,7 +94,8 @@ public sealed class NodePool(IEventBus? bus = null, ILogger<NodePool>? log = nul
 
     /// <summary>
     /// Reserves a slot on the least-busy node in <paramref name="pool"/>, rotating between equally busy
-    /// nodes. Waits up to <paramref name="timeout"/> for one to become free.
+    /// nodes. Waits up to <paramref name="timeout"/> for one to become free. A pool with no nodes at all
+    /// falls back to the default pool.
     /// </summary>
     /// <exception cref="NodeUnavailableException">No slot came free in time.</exception>
     public async Task<NodeLease> AcquireAsync(string pool, TimeSpan timeout, CancellationToken ct)
@@ -106,7 +109,14 @@ public sealed class NodePool(IEventBus? bus = null, ILogger<NodePool>? log = nul
 
             lock (_gate)
             {
-                if (TryReserve(pool) is { } node) return new NodeLease(this, node);
+                if (TryReserve(pool) is { } node)
+                {
+                    if (!pool.Equals(node.Hello.Pool, StringComparison.OrdinalIgnoreCase))
+                        log?.LogDebug("Pool '{Pool}' has no nodes; serving from '{Fallback}' instead",
+                            pool, node.Hello.Pool);
+
+                    return new NodeLease(this, node);
+                }
 
                 changed = _changed.Task;
             }
@@ -131,9 +141,18 @@ public sealed class NodePool(IEventBus? bus = null, ILogger<NodePool>? log = nul
         }
     }
 
-    private NodeConnection? TryReserve(string pool)
+    private NodeConnection? TryReserve(string requested)
     {
-        if (!_pools.TryGetValue(pool, out List<NodeConnection>? members) || members.Count == 0) return null;
+        string pool = requested;
+
+        if ((!_pools.TryGetValue(pool, out List<NodeConnection>? members) || members.Count == 0)
+            && !pool.Equals(DefaultPool, StringComparison.OrdinalIgnoreCase))
+        {
+            pool = DefaultPool;
+            _pools.TryGetValue(pool, out members);
+        }
+
+        if (members is null || members.Count == 0) return null;
 
         int cursor = _cursors.GetValueOrDefault(pool);
 

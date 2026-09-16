@@ -108,4 +108,29 @@ public sealed class NodePoolTests
         Assert.Empty(pool.Snapshot()["p"]);
         Assert.Single(pool.Snapshot()["q"]);
     }
+
+    [Fact]
+    public async Task An_empty_pool_falls_back_to_default()
+    {
+        NodePool pool = new();
+        pool.Add(Node("fallback", pool: "default"));
+
+        using NodeLease lease = await pool.AcquireAsync("p", TimeSpan.FromSeconds(1), CancellationToken.None);
+
+        Assert.Equal("fallback", lease.Node.Id);
+    }
+
+    [Fact]
+    public async Task A_populated_pool_does_not_fall_back_when_its_nodes_are_busy()
+    {
+        NodePool pool = new();
+        pool.Add(Node("own", maxConcurrency: 1));
+        pool.Add(Node("fallback", pool: "default"));
+
+        using NodeLease held = await pool.AcquireAsync("p", TimeSpan.FromSeconds(1), CancellationToken.None);
+        Assert.Equal("own", held.Node.Id);
+
+        await Assert.ThrowsAsync<NodeUnavailableException>(() =>
+            pool.AcquireAsync("p", TimeSpan.FromMilliseconds(50), CancellationToken.None));
+    }
 }
