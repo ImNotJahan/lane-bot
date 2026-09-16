@@ -16,6 +16,7 @@ namespace Lane.Surfaces.Discord.Voice;
 internal sealed class DiscordVoiceOutput(
     SessionId id,
     VoiceClient client,
+    Action onSpeaking,
     ILogger log)
     : SessionChannelBase(id, id.Surface, ChannelCapabilities.Voice | ChannelCapabilities.Interrupt), IVoiceOutput
 {
@@ -27,6 +28,8 @@ internal sealed class DiscordVoiceOutput(
     {
         // One utterance at a time. Two overlapping streams into one Opus encoder is noise.
         await _speaking.WaitAsync(ct).ConfigureAwait(false);
+
+        onSpeaking();
 
         try
         {
@@ -58,6 +61,8 @@ internal sealed class DiscordVoiceOutput(
         }
         finally
         {
+            onSpeaking();
+
             _speaking.Release();
         }
     }

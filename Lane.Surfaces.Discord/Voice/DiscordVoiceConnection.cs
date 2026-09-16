@@ -37,8 +37,21 @@ internal sealed class DiscordVoiceConnection(
     private SessionId?    _session;
     private IDisposable?  _attachment;
 
+    /// <summary>The channel she is sitting in, once <see cref="JoinAsync"/> has run.</summary>
+    public ulong ChannelId { get; private set; }
+
+    public string ChannelName { get; private set; } = "";
+
+    /// <summary>When something was last heard here or said here.</summary>
+    public DateTimeOffset LastActivity { get; private set; } = DateTimeOffset.UtcNow;
+
+    public void Touch() => LastActivity = DateTimeOffset.UtcNow;
+
     public async Task JoinAsync(ulong guildId, ulong channelId, string channelName, CancellationToken ct)
     {
+        ChannelId   = channelId;
+        ChannelName = channelName;
+
         SessionId id = new(surface, SessionKind.Voice, channelId.ToString());
 
         _session = id;
@@ -65,7 +78,11 @@ internal sealed class DiscordVoiceConnection(
 
         await _voice.StartAsync(cancellationToken: ct).ConfigureAwait(false);
 
-        _attachment = sessions.Attach(new DiscordVoiceOutput(id, _voice, log));
+        // Her own speaking counts as activity, or a long answer into a quiet channel would
+        // be talking against the idle clock.
+        _attachment = sessions.Attach(new DiscordVoiceOutput(id, _voice, Touch, log));
+
+        Touch();
 
         log.LogInformation("Joined voice channel {Channel} as {Session}", channelName, id);
     }
@@ -74,6 +91,10 @@ internal sealed class DiscordVoiceConnection(
     {
         // A null timestamp means the packet was lost; skipping mirrors the gap.
         if (args.Timestamp is null) return default;
+
+        // Discord only sends packets while someone is actually transmitting, so a packet
+        // arriving is the channel being used.
+        Touch();
 
         if (_sources.TryGetValue(args.Ssrc, out DiscordVoiceSource? source)) source.Write(args.Frame);
 
@@ -84,6 +105,8 @@ internal sealed class DiscordVoiceConnection(
     {
         if (args.UserId == gateway.Id) return default;   // her own voice
         if (_session is null) return default;
+
+        Touch();
 
         if (_sources.ContainsKey(args.Ssrc)) return default;
 

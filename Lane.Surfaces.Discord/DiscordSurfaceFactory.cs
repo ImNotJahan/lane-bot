@@ -6,6 +6,7 @@ using Lane.Core.Kernel;
 using Lane.Core.Memory;
 using Lane.Core.Sessions;
 using Lane.Core.Surfaces;
+using Lane.Core.Voice;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -44,6 +45,7 @@ public sealed class DiscordSurfaceFactory(IDiscordTokenSource tokens) : ISurface
             services.GetRequiredService<ILogger<DiscordSurface>>(),
             _consent ??= new DiscordConsent(services.GetService<IKeyValueStore>()),
             services.GetService<AudioRouter>(),
-            services.GetService<ISponsoredAccess>());
+            services.GetService<ISponsoredAccess>(),
+            services.GetService<VoiceChannelHosts>());
     }
 }

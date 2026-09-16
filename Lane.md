@@ -24,7 +24,7 @@ everything globally while still replying only where she was addressed.
 | `Lane.Providers` | Anthropic and OpenAI-compatible (OpenRouter, DeepSeek, any compatible endpoint) adapters. |
 | `Lane.Audio` | Ported DSP, continuous recognition, streaming synthesis, the audio router and the voice floor. |
 | `Lane.Memory` | SQLite state / transcript / key-value stores, the sliding-window, summary and profile handlers, the flush and maintenance service. |
-| `Lane.Tools` | The built-in abilities: `web_search`, `fetch_url`, `read_book`, `list_books`, `set_emoticon`, `link_identity`, `set_my_name`, `set_session_description`, and the scratchpad (`write_note`, `read_note`, `list_notes`, `delete_note`). |
+| `Lane.Tools` | The built-in abilities: `web_search`, `fetch_url`, `read_book`, `list_books`, `set_emoticon`, `list_voice_channels`, `join_voice_channel`, `link_identity`, `set_my_name`, `set_session_description`, and the scratchpad (`write_note`, `read_note`, `list_notes`, `delete_note`). |
 | `Lane.Tools.Mcp` | The MCP client: one supervised connection per configured server, its tools namespaced and sanitised. |
 | `Lane.Surfaces.Discord` | One Discord bot per configured instance: sessions, mentions, replies, attachments, embeds. |
 | `Lane.Surfaces.Terminal` | The keyboard as a surface. |
@@ -51,8 +51,10 @@ read loop, with logs on stderr so the conversation on stdout stays clean
 Keys: `ANTHROPIC_API_KEY`, optionally `OPENROUTER_API_KEY`, `BRAVE_API_KEY`,
 `DISCORD_API_KEY` and `LANE_API_KEY` (one per API client app). A surface whose token is missing logs and is skipped; the rest still run.
 Voice is off by default and needs `AZURE_KEY`, `AZURE_REGION` and — unless she is speaking
-through flite — `ELEVENLABS_KEY` (`Lane:Audio:Enabled`, plus `Voice:AutoJoin` on a Discord
-surface).
+through flite — `ELEVENLABS_KEY` (`Lane:Audio:Enabled`, plus `Voice:Enabled` on a Discord
+surface). Where she sits is then hers: `list_voice_channels` and `join_voice_channel` are
+tools, so she walks into a channel when someone asks her to rather than at startup, and
+leaves again after `Voice:IdleTimeout` (five minutes) with nothing heard and nothing said.
 
 ## Talking to the API
 

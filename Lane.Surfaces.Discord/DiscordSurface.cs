@@ -9,6 +9,7 @@ using Lane.Core.Messages;
 using Lane.Core.Presence;
 using Lane.Core.Sessions;
 using Lane.Core.Surfaces;
+using Lane.Core.Voice;
 using Microsoft.Extensions.Logging;
 using NetCord;
 using NetCord.Gateway;
@@ -29,8 +30,12 @@ namespace Lane.Surfaces.Discord;
 ///
 /// Two of these can run side by side. Nothing here is static, and the token, the channel
 /// filter and the memory grouping all come from this instance's own options.
+///
+/// It is also an <see cref="IVoiceChannelHost"/>: sitting in a voice channel is something
+/// Lane decides through a tool, not something this surface does to every guild it is added
+/// to the moment it connects.
 /// </summary>
-public sealed class DiscordSurface : ISurface
+public sealed class DiscordSurface : ISurface, IVoiceChannelHost
 {
     private readonly GatewayClient          _client;
     private readonly DiscordSurfaceOptions  _options;
@@ -41,6 +46,7 @@ public sealed class DiscordSurface : ISurface
     private readonly AudioRouter?           _router;
     private readonly ISponsoredAccess?      _sponsored;
     private readonly DiscordConsent         _consent;
+    private readonly VoiceChannelHosts?      _voiceHosts;
     private readonly ILogger<DiscordSurface> _log;
 
     /// <summary>Channels Lane has already attached to, so a second message does not attach twice.</summary>
@@ -48,7 +54,14 @@ public sealed class DiscordSurface : ISurface
 
     private readonly ConcurrentDictionary<ulong, SessionId> _openSessions = new();
 
+    /// <summary>One voice connection per guild, which is all Discord allows a bot anyway.</summary>
     private readonly ConcurrentDictionary<ulong, DiscordVoiceConnection> _voiceConnections = new();
+
+    /// <summary>Guilds she is in, by name, so she can be told where a voice channel lives.</summary>
+    private readonly ConcurrentDictionary<ulong, string> _guilds = new();
+
+    /// <summary>Who is sitting in which voice channel. One channel each — Discord's rule, not ours.</summary>
+    private readonly ConcurrentDictionary<ulong, ulong> _inVoice = new();
 
     /// <summary>What this bot shows about itself, composed from one slot per source.</summary>
     private readonly DiscordStatusPublisher _status;
@@ -56,6 +69,8 @@ public sealed class DiscordSurface : ISurface
     private IDisposable? _presence;
 
     private IDisposable? _energy;
+
+    private IDisposable? _voiceHost;
 
     private CancellationTokenSource? _lifetime;
 
@@ -72,8 +87,10 @@ public sealed class DiscordSurface : ISurface
         ILogger<DiscordSurface> log,
         DiscordConsent consent,
         AudioRouter? router = null,
-        ISponsoredAccess? sponsored = null)
+        ISponsoredAccess? sponsored = null,
+        VoiceChannelHosts? voiceHosts = null)
     {
+        _voiceHosts = voiceHosts;
         _consent   = consent;
         _router    = router;
         _sponsored = sponsored;
@@ -116,6 +133,8 @@ public sealed class DiscordSurface : ISurface
         _lifetime = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
         StartStatus(_lifetime.Token);
+
+        StartVoice(_lifetime.Token);
 
         await _client.StartAsync(cancellationToken: ct).ConfigureAwait(false);
 
@@ -228,61 +247,212 @@ public sealed class DiscordSurface : ISurface
     }
 
     /// <summary>
-    /// Joins a voice channel once the guild is known. Only when audio is configured — the
-    /// surface is text-only otherwise, and says so by simply not connecting.
+    /// Notes the guild and who is already sitting in its voice channels.
+    ///
+    /// She does not join anything here. Walking into a voice channel on every server she
+    /// has ever been added to, the moment she connects, is an open ear nobody asked for —
+    /// so where she sits is a thing she is asked for and decides, through
+    /// <c>list_voice_channels</c> and <c>join_voice_channel</c>.
     /// </summary>
     private ValueTask OnGuildCreate(GuildCreateEventArgs args)
     {
-        if (_router is null || !_options.Voice.AutoJoin) return default;
         if (args.Guild is not { } guild) return default;
 
-        _ = Task.Run(async () =>
+        _guilds[guild.Id] = guild.Name;
+
+        foreach (VoiceState state in guild.VoiceStates.Values)
         {
-            try
-            {
-                VoiceGuildChannel? channel = _options.Voice.ChannelId is { } wanted
-                    ? guild.Channels.Values.OfType<VoiceGuildChannel>().FirstOrDefault(c => c.Id == wanted)
-                    : guild.Channels.Values.OfType<VoiceGuildChannel>().FirstOrDefault();
+            if (state.UserId == _client.Id) continue;
 
-                if (channel is null)
-                {
-                    _log.LogWarning("No voice channel to join in {Guild}", guild.Name);
-                    return;
-                }
-
-                DiscordVoiceConnection connection = new(
-                    Id, _client, _sessions, _router, _identity, _options, _log);
-
-                if (!_voiceConnections.TryAdd(guild.Id, connection))
-                {
-                    await connection.DisposeAsync().ConfigureAwait(false);
-                    return;
-                }
-
-                await connection.JoinAsync(guild.Id, channel.Id, channel.Name,
-                    _lifetime?.Token ?? CancellationToken.None).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                // Voice failing must not cost the text channels.
-                _log.LogError(ex, "Could not join voice in {Guild}", guild.Name);
-            }
-        });
+            if (state.ChannelId is { } channel) _inVoice[state.UserId] = channel;
+        }
 
         return default;
     }
 
-    /// <summary>Stops listening to someone once they leave the channel.</summary>
+    /// <summary>Follows people in and out of voice channels, and stops listening to whoever left hers.</summary>
     private ValueTask OnVoiceStateUpdate(VoiceState state)
     {
         if (state.UserId == _client.Id) return default;
-        if (state.ChannelId is not null) return default;      // moved, not left
+
+        if (state.ChannelId is { } joined) _inVoice[state.UserId] = joined;
+        else _inVoice.TryRemove(state.UserId, out _);
 
         foreach (DiscordVoiceConnection connection in _voiceConnections.Values)
-            _ = connection.ForgetAsync(state.UserId);
+        {
+            // Somebody arriving is the channel being used, and keeps her from leaving in
+            // the seconds before they say hello.
+            if (state.ChannelId == connection.ChannelId) connection.Touch();
+            else _ = connection.ForgetAsync(state.UserId);
+        }
 
         return default;
     }
+
+    public SurfaceId Surface => Id;
+
+    /// <summary>True when she could join something: audio is wired up and voice is not switched off.</summary>
+    private bool VoiceAvailable => _router is not null && _options.Voice.Enabled;
+
+    public async ValueTask<IReadOnlyList<VoiceChannelSummary>> ListChannelsAsync(CancellationToken ct)
+    {
+        if (!VoiceAvailable) return [];
+
+        List<VoiceChannelSummary> summaries = [];
+
+        foreach ((ulong guildId, string guildName) in _guilds)
+        {
+            foreach (VoiceGuildChannel channel in await VoiceChannelsOfAsync(guildId, ct).ConfigureAwait(false))
+                summaries.Add(new VoiceChannelSummary
+                {
+                    Surface   = Id,
+                    Id        = channel.Id.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    Name      = channel.Name,
+                    Space     = guildName,
+                    Occupants = _inVoice.Count(seat => seat.Value == channel.Id),
+
+                    Joined = _voiceConnections.TryGetValue(guildId, out DiscordVoiceConnection? here) &&
+                             here.ChannelId == channel.Id
+                });
+        }
+
+        return summaries;
+    }
+
+    public async ValueTask<VoiceJoinResult> JoinAsync(string channelId, CancellationToken ct)
+    {
+        if (_router is null) return new VoiceJoinResult(false, "This bot has no audio configured, so it cannot hear or speak.");
+        if (!_options.Voice.Enabled) return new VoiceJoinResult(false, "Voice is switched off on this bot.");
+
+        if (!ulong.TryParse(channelId, System.Globalization.CultureInfo.InvariantCulture, out ulong id))
+            return new VoiceJoinResult(false, $"\"{channelId}\" is not a Discord channel id.");
+
+        (ulong guildId, string? name) = await FindVoiceChannelAsync(id, ct).ConfigureAwait(false);
+
+        if (name is null)
+            return new VoiceJoinResult(false, "That voice channel is not one this bot can see.");
+
+        if (_voiceConnections.TryGetValue(guildId, out DiscordVoiceConnection? existing))
+        {
+            if (existing.ChannelId == id)
+            {
+                existing.Touch();
+
+                return new VoiceJoinResult(true, $"Already sitting in {name}.");
+            }
+
+            // One connection per guild: moving means leaving the old channel first.
+            _voiceConnections.TryRemove(guildId, out _);
+
+            await existing.DisposeAsync().ConfigureAwait(false);
+        }
+
+        DiscordVoiceConnection connection = new(
+            Id, _client, _sessions, _router, _identity, _options, _log);
+
+        if (!_voiceConnections.TryAdd(guildId, connection))
+        {
+            await connection.DisposeAsync().ConfigureAwait(false);
+
+            return new VoiceJoinResult(false, "Something else was joining a channel on that server at the same time.");
+        }
+
+        try
+        {
+            await connection.JoinAsync(guildId, id, name, _lifetime?.Token ?? ct).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _voiceConnections.TryRemove(guildId, out _);
+
+            await connection.DisposeAsync().ConfigureAwait(false);
+
+            _log.LogError(ex, "Could not join voice channel {Channel}", id);
+
+            return new VoiceJoinResult(false, $"Could not join {name}: {ex.Message}");
+        }
+
+        return new VoiceJoinResult(true,
+            $"Joined {name}. You will leave on your own after {Describe(_options.Voice.IdleTimeout)} of quiet.");
+    }
+
+    /// <summary>The guild a voice channel belongs to, and its name. Null name when no guild has it.</summary>
+    private async Task<(ulong Guild, string? Name)> FindVoiceChannelAsync(ulong channelId, CancellationToken ct)
+    {
+        foreach (ulong guildId in _guilds.Keys)
+        {
+            foreach (VoiceGuildChannel channel in await VoiceChannelsOfAsync(guildId, ct).ConfigureAwait(false))
+                if (channel.Id == channelId) return (guildId, channel.Name);
+        }
+
+        return (0, null);
+    }
+
+    /// <summary>
+    /// Read over REST rather than off the gateway's guild, so a channel made after she
+    /// connected is one she can still be sent to.
+    /// </summary>
+    private async Task<IReadOnlyList<VoiceGuildChannel>> VoiceChannelsOfAsync(ulong guildId, CancellationToken ct)
+    {
+        try
+        {
+            IReadOnlyList<IGuildChannel> channels =
+                await _client.Rest.GetGuildChannelsAsync(guildId, cancellationToken: ct).ConfigureAwait(false);
+
+            return [.. channels.OfType<VoiceGuildChannel>()];
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _log.LogWarning(ex, "Could not list the channels of guild {Guild}", guildId);
+
+            return [];
+        }
+    }
+
+    /// <summary>Offers this bot's voice channels to her tools, and starts the clock that empties them.</summary>
+    private void StartVoice(CancellationToken ct)
+    {
+        if (!VoiceAvailable) return;
+
+        _voiceHost = _voiceHosts?.Register(this);
+
+        if (_options.Voice.IdleTimeout <= TimeSpan.Zero) return;
+
+        _ = Task.Run(async () =>
+        {
+            // Swept far more often than the timeout, so leaving is prompt without the timer
+            // itself being something anyone pays for.
+            using PeriodicTimer timer = new(TimeSpan.FromSeconds(15));
+
+            try
+            {
+                while (await timer.WaitForNextTickAsync(ct).ConfigureAwait(false))
+                    await LeaveIdleVoiceAsync().ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) { }
+        }, ct);
+    }
+
+    /// <summary>Leaves every voice channel that has heard nothing for longer than the timeout.</summary>
+    private async Task LeaveIdleVoiceAsync()
+    {
+        DateTimeOffset cutoff = DateTimeOffset.UtcNow - _options.Voice.IdleTimeout;
+
+        foreach ((ulong guildId, DiscordVoiceConnection connection) in _voiceConnections)
+        {
+            if (connection.LastActivity > cutoff) continue;
+            if (!_voiceConnections.TryRemove(guildId, out _)) continue;
+
+            _log.LogInformation("Leaving voice channel {Channel}: nothing for {Timeout}",
+                connection.ChannelName, _options.Voice.IdleTimeout);
+
+            try { await connection.DisposeAsync().ConfigureAwait(false); }
+            catch (Exception ex) { _log.LogWarning(ex, "Did not leave {Channel} cleanly", connection.ChannelName); }
+        }
+    }
+
+    private static string Describe(TimeSpan span) =>
+        span.TotalMinutes >= 1 ? $"{(int)span.TotalMinutes} minutes" : $"{(int)span.TotalSeconds} seconds";
 
     private ValueTask OnMessageCreate(Message message)
     {
@@ -485,6 +655,9 @@ public sealed class DiscordSurface : ISurface
 
         _energy?.Dispose();
         _energy = null;
+
+        _voiceHost?.Dispose();
+        _voiceHost = null;
 
         await _status.DisposeAsync().ConfigureAwait(false);
 

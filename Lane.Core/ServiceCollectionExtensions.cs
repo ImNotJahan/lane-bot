@@ -13,6 +13,7 @@ using Lane.Core.Pipeline.Stages;
 using Lane.Core.Prompts;
 using Lane.Core.Sessions;
 using Lane.Core.Tools;
+using Lane.Core.Voice;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
@@ -44,6 +45,7 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<ISessionThresholds>(NullSessionThresholds.Instance);
         services.TryAddSingleton<IPresenceSink, EventBusPresenceSink>();
         services.TryAddSingleton<ITranscriptFormatter, TranscriptFormatter>();
+        services.TryAddSingleton<VoiceChannelHosts>();
 
         services.AddOptions<SessionOptions>();
         services.AddOptions<AgentOptions>();

@@ -68,9 +68,17 @@ public sealed class StatusOptions
 
 public sealed class VoiceOptions
 {
-    /// <summary>Sit in a voice channel and listen. Off unless audio is configured too.</summary>
-    public bool AutoJoin { get; set; }
+    /// <summary>
+    /// Let her join voice channels when she is asked to. Which one and when is hers to
+    /// decide through <c>join_voice_channel</c>; this only says whether the ability exists,
+    /// and it does nothing unless audio is configured too.
+    /// </summary>
+    public bool Enabled { get; set; } = true;
 
-    /// <summary>Which channel to join. Unset means the first voice channel in the guild.</summary>
-    public ulong? ChannelId { get; set; }
+    /// <summary>
+    /// Leave a voice channel after this long with nothing heard in it and nothing said.
+    /// Sitting silently in an empty channel is a live socket and an open ear nobody asked
+    /// for.
+    /// </summary>
+    public TimeSpan IdleTimeout { get; set; } = TimeSpan.FromMinutes(5);
 }
