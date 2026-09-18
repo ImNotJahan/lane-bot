@@ -57,12 +57,6 @@ else
     warn "no .env in $SOURCE — Lane will not have any API keys on the new machine."
 fi
 
-if [ -f "$SOURCE/LaneCompanion/.env" ]; then
-    cp -p "$SOURCE/LaneCompanion/.env" "$DATA/companion.env"
-    chmod 600 "$DATA/companion.env"
-    say "companion.env          <- LaneCompanion/.env"
-fi
-
 # --- Configuration ------------------------------------------------------------
 
 cp -p "$SOURCE/Lane.Host/appsettings.json" "$DATA/appsettings.json"

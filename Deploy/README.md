@@ -8,7 +8,6 @@ on the new one. The repository carries the code; this carries everything else.
 | File | Comes from | Why it has to travel |
 |---|---|---|
 | `data/env` | `.env` | Every API key. Not in git, and nothing works without it. |
-| `data/companion.env` | `LaneCompanion/.env` | The companion's Discord token. |
 | `data/appsettings.json` | `Lane.Host/appsettings.json` | Surfaces, models, channel ids, energy, voice — the tuned instance, not the committed default. |
 | `data/appsettings.local.json` | same, if present | Local overrides, never committed. |
 | `data/Prompts/` | `Lane.Host/Prompts/` | Persona, monologue, routing, summary, profile. Committed, but a tuned `Persona.md` is data. |

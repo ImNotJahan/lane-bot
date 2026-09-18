@@ -202,13 +202,6 @@ else
     warn "the bundle has no env file; Lane will start with no API keys."
 fi
 
-if [ -f "$DATA/companion.env" ] && [ -d "$SOURCE/LaneCompanion" ]; then
-    backup "$SOURCE/LaneCompanion/.env" "$DATA/companion.env"
-    cp "$DATA/companion.env" "$SOURCE/LaneCompanion/.env"
-    chmod 600 "$SOURCE/LaneCompanion/.env"
-    say "companion.env -> LaneCompanion/.env (0600)"
-fi
-
 # --- Build --------------------------------------------------------------------
 
 if [ "$SKIP_BUILD" = 0 ]; then

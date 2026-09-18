@@ -1,6 +1,0 @@
-*/bin/*
-*/obj/*
-.env
-*/.env
-.vscode
-.DS_Store
