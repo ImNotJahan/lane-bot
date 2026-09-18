@@ -21,6 +21,19 @@ public sealed class AzureSpeechOptions
 
     /// <summary>Interim results are what barge-in listens to; without them she cannot be interrupted.</summary>
     public bool EmitInterimResults { get; set; } = true;
+
+    /// <summary>Words and names recognition is biased towards, such as her own name.</summary>
+    public List<string> Phrases { get; set; } = [];
+
+    internal void ApplyPhrases(Recognizer recognizer)
+    {
+        if (Phrases.Count == 0) return;
+
+        PhraseListGrammar grammar = PhraseListGrammar.FromRecognizer(recognizer);
+
+        foreach (string phrase in Phrases)
+            grammar.AddPhrase(phrase);
+    }
 }
 
 /// <summary>
@@ -53,6 +66,8 @@ public sealed class AzureSpeechRecognizer(AzureSpeechOptions options, ILogger<Az
         using PushAudioInputStream push = AudioInputStream.CreatePushStream(format);
         using AudioConfig audio = AudioConfig.FromStreamInput(push);
         using SpeechRecognizer recognizer = new(config, audio);
+
+        options.ApplyPhrases(recognizer);
 
         Channel<Transcript> transcripts = Channel.CreateUnbounded<Transcript>(
             new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });

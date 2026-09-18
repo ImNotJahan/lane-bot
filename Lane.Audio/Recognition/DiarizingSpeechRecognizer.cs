@@ -57,6 +57,8 @@ public sealed class DiarizingSpeechRecognizer(AzureSpeechOptions options, ILogge
         using AudioConfig audio = AudioConfig.FromStreamInput(push);
         using ConversationTranscriber transcriber = new(config, audio);
 
+        options.ApplyPhrases(transcriber);
+
         UtteranceBuffer heard = new(source.Format, Window);
 
         Channel<Transcript> transcripts = Channel.CreateUnbounded<Transcript>(

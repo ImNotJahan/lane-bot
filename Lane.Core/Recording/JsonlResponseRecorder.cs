@@ -37,6 +37,9 @@ public sealed class JsonlResponseRecorder : IResponseRecorder, IHostedService, I
 {
     private static readonly JsonSerializerOptions Json = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
+    private const           int      AppendAttempts   = 50;
+    private static readonly TimeSpan AppendRetryDelay = TimeSpan.FromMilliseconds(100);
+
     private readonly string                          _directory;
     private readonly Func<IEnumerable<Participant>>  _roster;
     private readonly TimeProvider                    _time;
@@ -148,7 +151,7 @@ public sealed class JsonlResponseRecorder : IResponseRecorder, IHostedService, I
             {
                 try
                 {
-                    await File.AppendAllTextAsync(path, lines.ToString()).ConfigureAwait(false);
+                    await AppendAsync(path, Encoding.UTF8.GetBytes(lines.ToString())).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
@@ -157,6 +160,36 @@ public sealed class JsonlResponseRecorder : IResponseRecorder, IHostedService, I
             }
 
             batch.Clear();
+        }
+    }
+
+    /// <summary>
+    /// Appends under an exclusive lock, so another process recording to the same directory can
+    /// never write over these bytes. Retries while that lock is held elsewhere.
+    /// </summary>
+    private static async Task AppendAsync(string path, byte[] bytes)
+    {
+        for (int attempt = 1; ; attempt++)
+        {
+            FileStream stream;
+
+            try
+            {
+                stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.None, 4096, useAsync: true);
+            }
+            catch (IOException) when (attempt < AppendAttempts)
+            {
+                await Task.Delay(AppendRetryDelay).ConfigureAwait(false);
+                continue;
+            }
+
+            await using (stream.ConfigureAwait(false))
+            {
+                await stream.WriteAsync(bytes).ConfigureAwait(false);
+                await stream.FlushAsync().ConfigureAwait(false);
+            }
+
+            return;
         }
     }
 
